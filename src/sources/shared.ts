@@ -2,7 +2,14 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { exists } from "../util"
 
+const DEFAULT_ENTRYPOINT = "opencode.plugin.ts"
+
 export async function resolvePluginEntry(rootDir: string, explicitEntry?: string): Promise<string> {
+  const conventionalEntrypoint = path.join(rootDir, DEFAULT_ENTRYPOINT)
+  if (await exists(conventionalEntrypoint)) {
+    return conventionalEntrypoint
+  }
+
   if (explicitEntry) {
     const resolved = resolveInside(rootDir, explicitEntry)
     if (!(await exists(resolved))) {

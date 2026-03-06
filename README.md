@@ -57,4 +57,5 @@ The sync process updates `plugins.lock.json` in the configured cache directory.
 - Startup loads cached plugins only.
 - Failed plugin sync/load logs a warning and continues.
 - Build commands are never auto-run; they only run when explicitly set with `build.command`.
+- If a plugin root contains `opencode.plugin.ts`, that file is always used as the entrypoint (even if `entry` is set).
 - Tool/auth collisions are last-write-wins with warnings.
