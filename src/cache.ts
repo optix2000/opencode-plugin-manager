@@ -109,3 +109,38 @@ export function gitInstallDir(cache: CacheContext, repo: string, commit: string)
 export function githubInstallDir(cache: CacheContext, repo: string, tag: string): string {
   return path.join(sourceDir(cache, "github-release"), `${sanitizeSegment(repo)}-${sanitizeSegment(tag)}`)
 }
+
+export type CleanCacheResult = {
+  removedPaths: string[]
+}
+
+export async function cleanCacheDirectories(cache: CacheContext, lockfile: Lockfile): Promise<CleanCacheResult> {
+  const keep = new Set<string>()
+  for (const entry of Object.values(lockfile.plugins)) {
+    keep.add(path.resolve(installRootForEntry(cache, entry)))
+  }
+
+  const removedPaths: string[] = []
+  for (const source of ["npm", "git", "github-release"] as const) {
+    const root = sourceDir(cache, source)
+    if (!(await exists(root))) continue
+
+    const children = await fs.readdir(root, { withFileTypes: true })
+    for (const child of children) {
+      if (!child.isDirectory()) continue
+      const childPath = path.resolve(path.join(root, child.name))
+      if (keep.has(childPath)) continue
+
+      await fs.rm(childPath, { recursive: true, force: true })
+      removedPaths.push(childPath)
+    }
+  }
+
+  return { removedPaths }
+}
+
+function installRootForEntry(cache: CacheContext, entry: LockEntry): string {
+  if (entry.source === "npm") return npmInstallDir(cache, entry.name, entry.resolvedVersion)
+  if (entry.source === "git") return gitInstallDir(cache, entry.repo, entry.commit)
+  return githubInstallDir(cache, entry.repo, entry.tag)
+}

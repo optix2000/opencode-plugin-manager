@@ -1,9 +1,11 @@
 import { tool, type Hooks, type Plugin, type ToolContext } from "@opencode-ai/plugin"
-import { readLockfile, resolveCacheContext, withCacheLock, writeLockfile } from "./cache"
+import { cleanCacheDirectories, readLockfile, resolveCacheContext, withCacheLock, writeLockfile } from "./cache"
 import { loadMergedConfig } from "./config"
 import { loadManagedPlugins, mergeManagedHooks } from "./loader"
 import { resolveCachedPluginPaths, syncPlugins, type SyncMode } from "./resolver"
 import fs from "node:fs/promises"
+import type { Lockfile } from "./types"
+import { exists } from "./util"
 
 export const PluginManager: Plugin = async (input) => {
   let mergedConfig = await loadMergedConfig(input)
@@ -18,13 +20,25 @@ export const PluginManager: Plugin = async (input) => {
   const installTool = tool({
     description: "Install managed plugins without advancing locked versions",
     args: {},
-    execute: async (_, context) => runSync("install", context),
+    execute: async (_, context) => runInstallOrUpdate("install", context),
   })
 
   const updateTool = tool({
     description: "Update managed plugins to newest versions matching constraints",
     args: {},
-    execute: async (_, context) => runSync("update", context),
+    execute: async (_, context) => runInstallOrUpdate("update", context),
+  })
+
+  const cleanTool = tool({
+    description: "Remove cached plugin versions not referenced by the current config",
+    args: {},
+    execute: async (_, context) => runClean(context),
+  })
+
+  const syncTool = tool({
+    description: "Install plugins and then clean stale cached versions",
+    args: {},
+    execute: async (_, context) => runInstallThenClean(context),
   })
 
   const selfUpdateTool = tool({
@@ -56,6 +70,8 @@ export const PluginManager: Plugin = async (input) => {
     ...(mergedHooks.tool ?? {}),
     "opm.install": installTool,
     "opm.update": updateTool,
+    "opm.clean": cleanTool,
+    "opm.sync": syncTool,
     "opm.self-update": selfUpdateTool,
   }
 
@@ -79,7 +95,7 @@ export const PluginManager: Plugin = async (input) => {
     },
   }
 
-  async function runSync(mode: SyncMode, context: ToolContext): Promise<string> {
+  async function runInstallOrUpdate(mode: SyncMode, context: ToolContext): Promise<string> {
     const title = mode === "install" ? "Installing managed plugins" : "Updating managed plugins"
     context.metadata({ title })
 
@@ -114,6 +130,42 @@ export const PluginManager: Plugin = async (input) => {
     lines.push("Restart opencode to register newly added tools/auth hooks.")
 
     return lines.join("\n")
+  }
+
+  async function runClean(context: ToolContext): Promise<string> {
+    context.metadata({ title: "Cleaning managed plugin cache" })
+
+    mergedConfig = await loadMergedConfig(input)
+    cache = resolveCacheContext(mergedConfig)
+
+    const result = await withCacheLock(cache, async () => {
+      const current = await readLockfile(cache.lockfilePath)
+      const configuredIDs = new Set(mergedConfig.plugins.map((plugin) => plugin.id))
+      const pruned = await pruneLockfile(current, configuredIDs)
+      const cleaned = await cleanCacheDirectories(cache, pruned.lockfile)
+      await writeLockfile(cache.lockfilePath, pruned.lockfile)
+      return {
+        lockfile: pruned.lockfile,
+        prunedIDs: pruned.prunedIDs,
+        removedPaths: cleaned.removedPaths,
+      }
+    })
+
+    const refreshedEntries = await resolveCachedPluginPaths(mergedConfig.plugins, result.lockfile)
+    loaded = await loadManagedPlugins(refreshedEntries, input)
+
+    const lines: string[] = []
+    lines.push(`Removed ${result.removedPaths.length} cached plugin directory(s).`)
+    if (result.prunedIDs.length) lines.push(`Pruned lock entries: ${result.prunedIDs.join(", ")}`)
+    if (result.removedPaths.length) lines.push(`Removed: ${result.removedPaths.join(", ")}`)
+    return lines.join("\n")
+  }
+
+  async function runInstallThenClean(context: ToolContext): Promise<string> {
+    context.metadata({ title: "Syncing managed plugins" })
+    const installOutput = await runInstallOrUpdate("install", context)
+    const cleanOutput = await runClean(context)
+    return [installOutput, "", cleanOutput].join("\n")
   }
 }
 
@@ -160,5 +212,33 @@ function parseSemver(value: string): { major: number; minor: number; patch: numb
     major: Number(match[1]),
     minor: Number(match[2]),
     patch: Number(match[3]),
+  }
+}
+
+async function pruneLockfile(
+  current: Lockfile,
+  configuredIDs: Set<string>,
+): Promise<{ lockfile: Lockfile; prunedIDs: string[] }> {
+  const prunedIDs: string[] = []
+  const next: Lockfile["plugins"] = {}
+
+  for (const [id, entry] of Object.entries(current.plugins)) {
+    if (!configuredIDs.has(id)) {
+      prunedIDs.push(id)
+      continue
+    }
+    if (!(await exists(entry.resolvedPath))) {
+      prunedIDs.push(id)
+      continue
+    }
+    next[id] = entry
+  }
+
+  return {
+    lockfile: {
+      version: 1,
+      plugins: next,
+    },
+    prunedIDs,
   }
 }
