@@ -5,17 +5,17 @@ import { exists } from "../util"
 const DEFAULT_ENTRYPOINT = "opencode.plugin.ts"
 
 export async function resolvePluginEntry(rootDir: string, explicitEntry?: string): Promise<string> {
-  const conventionalEntrypoint = path.join(rootDir, DEFAULT_ENTRYPOINT)
-  if (await exists(conventionalEntrypoint)) {
-    return conventionalEntrypoint
-  }
-
   if (explicitEntry) {
     const resolved = resolveInside(rootDir, explicitEntry)
     if (!(await exists(resolved))) {
       throw new Error(`Configured entrypoint not found: ${resolved}`)
     }
     return resolved
+  }
+
+  const conventionalEntrypoint = path.join(rootDir, DEFAULT_ENTRYPOINT)
+  if (await exists(conventionalEntrypoint)) {
+    return conventionalEntrypoint
   }
 
   const pkgPath = path.join(rootDir, "package.json")
