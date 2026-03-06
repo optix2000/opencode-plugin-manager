@@ -49,6 +49,8 @@ Run tools from opencode:
 
 - `opm.install` installs plugins from `plugins.json` and reuses compatible locked versions.
 - `opm.update` refreshes plugins to the newest versions matching configured constraints.
+- `opm.clean` removes cached plugin directories and lock entries that are no longer referenced.
+- `opm.sync` runs install and then clean.
 - `opm.self-update` checks npm for a newer `opencode-plugin-manager` release and tells you what to pin in `opencode.json`.
 
 Install/update writes `plugins.lock.json` in the configured cache directory.
@@ -68,6 +70,14 @@ opencode slash commands are prompt templates, so add command entries that call t
       "description": "Update managed plugins",
       "template": "Run the opm.update tool to update managed plugins to the highest versions that match constraints."
     },
+    "opm-clean": {
+      "description": "Clean stale managed plugin cache",
+      "template": "Run the opm.clean tool to remove stale managed plugin cache entries and prune lock entries."
+    },
+    "opm-sync": {
+      "description": "Install then clean managed plugins",
+      "template": "Run the opm.sync tool to install managed plugins and then clean stale cache entries."
+    },
     "opm-self-update": {
       "description": "Check plugin-manager updates",
       "template": "Run the opm.self-update tool and report whether an update is available."
@@ -76,7 +86,7 @@ opencode slash commands are prompt templates, so add command entries that call t
 }
 ```
 
-Then use `/opm-install`, `/opm-update`, and `/opm-self-update`.
+Then use `/opm-install`, `/opm-update`, `/opm-clean`, `/opm-sync`, and `/opm-self-update`.
 
 This repo also includes starter templates in `commands/` that you can copy into `.opencode/commands/`.
 
