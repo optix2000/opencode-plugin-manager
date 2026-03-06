@@ -62,13 +62,7 @@ export async function syncGithubReleasePlugin(spec: GithubSpec, cache: CacheCont
       await fs.rename(extractedDir, targetDir)
     }
 
-    const resolvedPath = spec.entry
-      ? path.resolve(targetDir, spec.entry)
-      : await resolvePluginEntry(targetDir, maybeDirectFileEntry(asset.name, targetDir))
-
-    if (!(await exists(resolvedPath))) {
-      throw new Error(`Resolved entrypoint does not exist: ${resolvedPath}`)
-    }
+    const resolvedPath = await resolvePluginEntry(targetDir, spec.entry ?? maybeDirectFileEntry(asset.name, targetDir))
 
     return {
       id: spec.id,
