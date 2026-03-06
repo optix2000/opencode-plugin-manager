@@ -43,14 +43,42 @@ Create `plugins.json` (or `plugins.jsonc`) in `.opencode/` or your global openco
 
 `assetDigest` is optional. Provide it when you want strict digest verification for GitHub release assets.
 
-## Sync flow
+## Install and update flow
 
-Run the tool from opencode:
+Run tools from opencode:
 
-- `plugin-manager.sync`
-- `plugin-manager.sync {"force":true}`
+- `opm.install` installs plugins from `plugins.json` and reuses compatible locked versions.
+- `opm.update` refreshes plugins to the newest versions matching configured constraints.
+- `opm.self-update` checks npm for a newer `opencode-plugin-manager` release and tells you what to pin in `opencode.json`.
 
-The sync process updates `plugins.lock.json` in the configured cache directory.
+Install/update writes `plugins.lock.json` in the configured cache directory.
+
+## Slash command templates
+
+opencode slash commands are prompt templates, so add command entries that call these tools:
+
+```jsonc
+{
+  "command": {
+    "opm-install": {
+      "description": "Install managed plugins",
+      "template": "Run the opm.install tool to install managed plugins from plugins.json."
+    },
+    "opm-update": {
+      "description": "Update managed plugins",
+      "template": "Run the opm.update tool to update managed plugins to the highest versions that match constraints."
+    },
+    "opm-self-update": {
+      "description": "Check plugin-manager updates",
+      "template": "Run the opm.self-update tool and report whether an update is available."
+    }
+  }
+}
+```
+
+Then use `/opm-install`, `/opm-update`, and `/opm-self-update`.
+
+This repo also includes starter templates in `commands/` that you can copy into `.opencode/commands/`.
 
 ## Behavior
 
