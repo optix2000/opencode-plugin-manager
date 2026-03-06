@@ -49,7 +49,8 @@ export function pluginDisplayName(spec: ManagedPluginSpec): string {
   if (spec.source === "npm") return spec.version ? `${spec.name}@${spec.version}` : spec.name
   if (spec.source === "git") return spec.ref ? `${spec.repo}#${spec.ref}` : spec.repo
   if (spec.source === "github-release") return spec.tag ? `${spec.repo}@${spec.tag}` : spec.repo
-  return spec.id
+  const _exhaustive: never = spec
+  return _exhaustive
 }
 
 function normalizePlugin(plugin: PluginsFile["plugins"][number], fromFile: string): ManagedPluginSpec {

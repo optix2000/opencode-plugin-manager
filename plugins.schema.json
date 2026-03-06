@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opencode.ai/schemas/plugins.schema.json",
+  "title": "opencode-plugin-manager plugins.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "cacheDir": {
+      "type": "string",
+      "description": "Optional plugin cache directory. Defaults to ~/.cache/opencode/plugins"
+    },
+    "plugins": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "npm shorthand, for example: my-plugin@1.2.3"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "name"
+            ],
+            "properties": {
+              "source": {
+                "const": "npm"
+              },
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "entry": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "repo"
+            ],
+            "properties": {
+              "source": {
+                "const": "git"
+              },
+              "repo": {
+                "type": "string",
+                "format": "uri"
+              },
+              "ref": {
+                "type": "string"
+              },
+              "entry": {
+                "type": "string"
+              },
+              "build": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "command"
+                ],
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "timeout": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 300000
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "repo"
+            ],
+            "properties": {
+              "source": {
+                "const": "github-release"
+              },
+              "repo": {
+                "type": "string",
+                "pattern": "^[^/]+/[^/]+$"
+              },
+              "tag": {
+                "type": "string"
+              },
+              "asset": {
+                "type": "string"
+              },
+              "entry": {
+                "type": "string"
+              },
+              "assetDigest": {
+                "type": "string",
+                "description": "Optional sha256:<hex> integrity guard"
+              },
+              "build": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "command"
+                ],
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "timeout": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 300000
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "plugins"
+  ]
+}
