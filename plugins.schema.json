@@ -16,7 +16,43 @@
         "oneOf": [
           {
             "type": "string",
-            "description": "npm shorthand, for example: my-plugin@1.2.3"
+            "description": "npm shorthand (my-plugin@1.2.3) or local path shorthand (./plugin, ../plugin, /abs/plugin, ~/plugin)"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "path"
+            ],
+            "properties": {
+              "source": {
+                "const": "local"
+              },
+              "path": {
+                "type": "string"
+              },
+              "entry": {
+                "type": "string"
+              },
+              "build": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "command"
+                ],
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "timeout": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 300000
+                  }
+                }
+              }
+            }
           },
           {
             "type": "object",

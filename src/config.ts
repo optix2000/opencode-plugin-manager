@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { PluginsFileSchema, type ManagedPluginSpec, type NormalizedPluginSpec, type PluginsFile } from "./types"
-import { exists, normalizeGitRepo, parseNpmShorthand, readJsoncFile } from "./util"
+import { exists, expandHome, normalizeGitRepo, parseNpmShorthand, readJsoncFile } from "./util"
 
 const CONFIG_FILENAMES = ["plugins.json", "plugins.jsonc"]
 
@@ -48,6 +48,7 @@ export async function loadMergedConfig(input: RuntimePluginInput): Promise<Merge
 export function pluginDisplayName(spec: ManagedPluginSpec): string {
   if (spec.source === "npm") return spec.version ? `${spec.name}@${spec.version}` : spec.name
   if (spec.source === "git") return spec.ref ? `${spec.repo}#${spec.ref}` : spec.repo
+  if (spec.source === "local") return spec.path
   if (spec.source === "github-release") return spec.tag ? `${spec.repo}@${spec.tag}` : spec.repo
   const _exhaustive: never = spec
   return _exhaustive
@@ -55,6 +56,16 @@ export function pluginDisplayName(spec: ManagedPluginSpec): string {
 
 function normalizePlugin(plugin: PluginsFile["plugins"][number], fromFile: string): ManagedPluginSpec {
   if (typeof plugin === "string") {
+    if (isLocalPathShorthand(plugin)) {
+      const resolvedPath = resolveLocalPath(plugin, fromFile)
+      return {
+        source: "local",
+        id: `local:${resolvedPath}`,
+        path: resolvedPath,
+        fromFile,
+      }
+    }
+
     const { name, version } = parseNpmShorthand(plugin)
     return {
       source: "npm",
@@ -83,12 +94,37 @@ function normalizePlugin(plugin: PluginsFile["plugins"][number], fromFile: strin
     }
   }
 
+  if (normalized.source === "local") {
+    const resolvedPath = resolveLocalPath(normalized.path, fromFile)
+    return {
+      ...normalized,
+      path: resolvedPath,
+      id: `local:${resolvedPath}`,
+      fromFile,
+    }
+  }
+
   return {
     ...normalized,
     repo: normalized.repo.toLowerCase(),
     id: `github-release:${normalized.repo.toLowerCase()}`,
     fromFile,
   }
+}
+
+function isLocalPathShorthand(value: string): boolean {
+  return (
+    value.startsWith("./") ||
+    value.startsWith("../") ||
+    value.startsWith("~/") ||
+    value.startsWith("/") ||
+    path.isAbsolute(value)
+  )
+}
+
+function resolveLocalPath(value: string, fromFile: string): string {
+  const baseDir = path.dirname(fromFile)
+  return path.resolve(baseDir, expandHome(value))
 }
 
 async function parseConfigFile(filePath: string): Promise<PluginsFile | null> {

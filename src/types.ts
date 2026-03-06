@@ -22,6 +22,13 @@ const GitPluginSchema = z.object({
   build: BuildSchema.optional(),
 })
 
+const LocalPluginSchema = z.object({
+  source: z.literal("local"),
+  path: z.string().min(1),
+  entry: z.string().min(1).optional(),
+  build: BuildSchema.optional(),
+})
+
 const GithubReleasePluginSchema = z.object({
   source: z.literal("github-release"),
   repo: z.string().regex(/^[^/]+\/[^/]+$/),
@@ -32,7 +39,13 @@ const GithubReleasePluginSchema = z.object({
   build: BuildSchema.optional(),
 })
 
-export const PluginInputSchema = z.union([z.string().min(1), NpmPluginSchema, GitPluginSchema, GithubReleasePluginSchema])
+export const PluginInputSchema = z.union([
+  z.string().min(1),
+  NpmPluginSchema,
+  GitPluginSchema,
+  LocalPluginSchema,
+  GithubReleasePluginSchema,
+])
 
 export const PluginsFileSchema = z.object({
   cacheDir: z.string().min(1).optional(),
@@ -57,6 +70,12 @@ export type NormalizedPluginSpec =
       build?: z.infer<typeof BuildSchema>
     }
   | {
+      source: "local"
+      path: string
+      entry?: string
+      build?: z.infer<typeof BuildSchema>
+    }
+  | {
       source: "github-release"
       repo: string
       tag?: string
@@ -73,7 +92,7 @@ export type ManagedPluginSpec = NormalizedPluginSpec & {
 
 const LockEntryBaseSchema = z.object({
   id: z.string().min(1),
-  source: z.enum(["npm", "git", "github-release"]),
+  source: z.enum(["npm", "git", "local", "github-release"]),
   resolvedPath: z.string().min(1),
   updatedAt: z.string().datetime(),
   integrity: z.string().min(1).optional(),
@@ -93,6 +112,12 @@ const GitLockEntrySchema = LockEntryBaseSchema.extend({
   commit: z.string().min(1),
 })
 
+const LocalLockEntrySchema = LockEntryBaseSchema.extend({
+  source: z.literal("local"),
+  path: z.string().min(1),
+  entry: z.string().min(1).optional(),
+})
+
 const GithubReleaseLockEntrySchema = LockEntryBaseSchema.extend({
   source: z.literal("github-release"),
   repo: z.string().regex(/^[^/]+\/[^/]+$/),
@@ -103,6 +128,7 @@ const GithubReleaseLockEntrySchema = LockEntryBaseSchema.extend({
 export const LockEntrySchema = z.discriminatedUnion("source", [
   NpmLockEntrySchema,
   GitLockEntrySchema,
+  LocalLockEntrySchema,
   GithubReleaseLockEntrySchema,
 ])
 

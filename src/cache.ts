@@ -117,7 +117,9 @@ export type CleanCacheResult = {
 export async function cleanCacheDirectories(cache: CacheContext, lockfile: Lockfile): Promise<CleanCacheResult> {
   const keep = new Set<string>()
   for (const entry of Object.values(lockfile.plugins)) {
-    keep.add(path.resolve(installRootForEntry(cache, entry)))
+    const installRoot = installRootForEntry(cache, entry)
+    if (!installRoot) continue
+    keep.add(path.resolve(installRoot))
   }
 
   const removedPaths: string[] = []
@@ -139,8 +141,9 @@ export async function cleanCacheDirectories(cache: CacheContext, lockfile: Lockf
   return { removedPaths }
 }
 
-function installRootForEntry(cache: CacheContext, entry: LockEntry): string {
+function installRootForEntry(cache: CacheContext, entry: LockEntry): string | undefined {
   if (entry.source === "npm") return npmInstallDir(cache, entry.name, entry.resolvedVersion)
   if (entry.source === "git") return gitInstallDir(cache, entry.repo, entry.commit)
-  return githubInstallDir(cache, entry.repo, entry.tag)
+  if (entry.source === "github-release") return githubInstallDir(cache, entry.repo, entry.tag)
+  return undefined
 }

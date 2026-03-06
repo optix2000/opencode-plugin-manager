@@ -3,6 +3,7 @@ import type { LockEntry, Lockfile, ManagedPluginSpec } from "./types"
 import { exists } from "./util"
 import { syncGitPlugin } from "./sources/git"
 import { syncGithubReleasePlugin } from "./sources/github"
+import { syncLocalPlugin } from "./sources/local"
 import { syncNpmPlugin } from "./sources/npm"
 import { pluginDisplayName } from "./config"
 import semver from "semver"
@@ -95,6 +96,10 @@ async function syncSinglePlugin(
     return syncGitPlugin(spec, cache, { lockedCommit })
   }
 
+  if (spec.source === "local") {
+    return syncLocalPlugin(spec)
+  }
+
   const lockedTag = mode === "install" && previous?.source === "github-release" ? previous.tag : undefined
   const lockedAsset = mode === "install" && previous?.source === "github-release" ? previous.asset : undefined
   return syncGithubReleasePlugin(spec, cache, { lockedTag, lockedAsset })
@@ -111,6 +116,10 @@ function isCompatibleLock(spec: ManagedPluginSpec, entry: LockEntry): boolean {
   if (spec.source === "git" && entry.source === "git") {
     if (!spec.ref) return true
     return entry.ref === spec.ref
+  }
+
+  if (spec.source === "local" && entry.source === "local") {
+    return entry.path === spec.path && entry.entry === spec.entry
   }
 
   if (spec.source === "github-release" && entry.source === "github-release") {

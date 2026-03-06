@@ -1,8 +1,8 @@
 # opencode-plugin-manager
 
-`opencode-plugin-manager` is an opencode meta-plugin that manages plugin sources from npm, git repositories, and GitHub releases.
+`opencode-plugin-manager` is an opencode meta-plugin that manages plugin sources from npm, git repositories, local paths, and GitHub releases.
 
-It does not auto-download on startup. You explicitly run `plugin-manager.sync` to install/update plugins, and startup loads only cached plugins.
+It does not auto-download on startup. You explicitly run `opm.sync` to install/update plugins, and startup loads from locked plugin paths.
 
 ## Install
 
@@ -24,11 +24,20 @@ Create `plugins.json` (or `plugins.jsonc`) in `.opencode/` or your global openco
   "cacheDir": "~/.cache/opencode/plugins",
   "plugins": [
     "example-plugin@1.2.3",
+    "./plugins/my-local-plugin",
     {
       "source": "git",
       "repo": "https://github.com/acme/opencode-git-plugin.git",
       "ref": "v1.0.0",
       "entry": "./dist/index.js"
+    },
+    {
+      "source": "local",
+      "path": "../my-local-plugin",
+      "entry": "./dist/index.js",
+      "build": {
+        "command": "npm run build"
+      }
     },
     {
       "source": "github-release",
@@ -92,7 +101,7 @@ This repo also includes starter templates in `commands/` that you can copy into 
 
 ## Behavior
 
-- Startup loads cached plugins only.
+- Startup loads plugins from locked paths (cached installs and local paths).
 - Failed plugin sync/load logs a warning and continues.
 - Build commands are never auto-run; they only run when explicitly set with `build.command`.
 - If `entry` is configured, it takes precedence. Otherwise, `opencode.plugin.ts` is used automatically when present.
