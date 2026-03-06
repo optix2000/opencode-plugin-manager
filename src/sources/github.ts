@@ -16,10 +16,14 @@ type GithubRelease = {
   }[]
 }
 
-export async function syncGithubReleasePlugin(spec: GithubSpec, cache: CacheContext): Promise<LockEntry> {
-  const release = await fetchRelease(spec)
+export async function syncGithubReleasePlugin(
+  spec: GithubSpec,
+  cache: CacheContext,
+  options: { lockedTag?: string; lockedAsset?: string } = {},
+): Promise<LockEntry> {
+  const release = await fetchRelease(spec, options.lockedTag)
   const tag = release.tag_name
-  const asset = selectAsset(release, spec.asset)
+  const asset = selectAsset(release, options.lockedAsset ?? spec.asset)
 
   if (!asset) {
     throw new Error(`No matching release asset found for ${spec.repo}`)
@@ -107,9 +111,10 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
-async function fetchRelease(spec: GithubSpec): Promise<GithubRelease> {
-  const endpoint = spec.tag
-    ? `https://api.github.com/repos/${spec.repo}/releases/tags/${encodeURIComponent(spec.tag)}`
+async function fetchRelease(spec: GithubSpec, lockedTag?: string): Promise<GithubRelease> {
+  const tag = lockedTag ?? spec.tag
+  const endpoint = tag
+    ? `https://api.github.com/repos/${spec.repo}/releases/tags/${encodeURIComponent(tag)}`
     : `https://api.github.com/repos/${spec.repo}/releases/latest`
 
   const response = await fetch(endpoint, { headers: githubHeaders() })

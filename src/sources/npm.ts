@@ -8,11 +8,14 @@ import { resolvePluginEntry } from "./shared"
 
 type NpmSpec = Extract<ManagedPluginSpec, { source: "npm" }>
 
-export async function syncNpmPlugin(spec: NpmSpec, cache: CacheContext): Promise<LockEntry> {
-  const requestedVersion = spec.version ?? "latest"
+export async function syncNpmPlugin(
+  spec: NpmSpec,
+  cache: CacheContext,
+  options: { lockedVersion?: string } = {},
+): Promise<LockEntry> {
+  const requestedVersion = options.lockedVersion ?? spec.version ?? "latest"
   const tempDir = await fs.mkdtemp(path.join(cache.rootDir, ".tmp-npm-"))
 
-  const dep = spec.version ? `${spec.name}@${spec.version}` : spec.name
   const pkgJsonPath = path.join(tempDir, "package.json")
   await fs.writeFile(
     pkgJsonPath,
@@ -55,7 +58,7 @@ export async function syncNpmPlugin(spec: NpmSpec, cache: CacheContext): Promise
       id: spec.id,
       source: "npm",
       name: spec.name,
-      requestedVersion: spec.version,
+      requestedVersion: spec.version ?? options.lockedVersion,
       resolvedVersion,
       resolvedPath,
       updatedAt: new Date().toISOString(),

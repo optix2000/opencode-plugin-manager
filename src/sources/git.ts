@@ -8,14 +8,20 @@ import { resolvePluginEntry } from "./shared"
 
 type GitSpec = Extract<ManagedPluginSpec, { source: "git" }>
 
-export async function syncGitPlugin(spec: GitSpec, cache: CacheContext): Promise<LockEntry> {
+export async function syncGitPlugin(
+  spec: GitSpec,
+  cache: CacheContext,
+  options: { lockedCommit?: string } = {},
+): Promise<LockEntry> {
   const tempDir = await fs.mkdtemp(path.join(cache.rootDir, ".tmp-git-"))
   const cloneDir = path.join(tempDir, "repo")
 
   try {
     await runCommand({ command: "git", args: ["clone", spec.repo, cloneDir] })
 
-    if (spec.ref) {
+    if (options.lockedCommit) {
+      await runCommand({ command: "git", args: ["-C", cloneDir, "checkout", options.lockedCommit] })
+    } else if (spec.ref) {
       await runCommand({ command: "git", args: ["-C", cloneDir, "checkout", spec.ref] })
     }
 

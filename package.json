@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "jsonc-parser": "^3.3.1",
+    "semver": "^7.7.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "@types/semver": "^7.7.1",
     "typescript": "^5.9.2"
   }
 }

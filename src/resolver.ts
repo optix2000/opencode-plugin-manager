@@ -5,6 +5,9 @@ import { syncGitPlugin } from "./sources/git"
 import { syncGithubReleasePlugin } from "./sources/github"
 import { syncNpmPlugin } from "./sources/npm"
 import { pluginDisplayName } from "./config"
+import semver from "semver"
+
+export type SyncMode = "install" | "update"
 
 export type SyncPluginsResult = {
   lockfile: Lockfile
@@ -17,9 +20,9 @@ export async function syncPlugins(input: {
   specs: ManagedPluginSpec[]
   cache: CacheContext
   currentLock: Lockfile
-  force?: boolean
+  mode: SyncMode
 }): Promise<SyncPluginsResult> {
-  const { specs, cache, currentLock, force = false } = input
+  const { specs, cache, currentLock, mode } = input
   const nextPlugins: Record<string, LockEntry> = {}
 
   const updated: string[] = []
@@ -28,16 +31,18 @@ export async function syncPlugins(input: {
 
   for (const spec of specs) {
     const previous = currentLock.plugins[spec.id]
-    if (!force && previous && (await exists(previous.resolvedPath))) {
+    const compatibleLock = previous && isCompatibleLock(spec, previous) ? previous : undefined
+
+    if (mode === "install" && compatibleLock && (await exists(compatibleLock.resolvedPath))) {
       nextPlugins[spec.id] = previous
       reused.push(`${pluginDisplayName(spec)} (cached)`)
       continue
     }
 
     try {
-      const synced = await syncSinglePlugin(spec, cache)
+      const synced = await syncSinglePlugin(spec, cache, compatibleLock, mode)
       nextPlugins[spec.id] = synced
-      updated.push(pluginDisplayName(spec))
+      updated.push(`${pluginDisplayName(spec)} (${mode})`)
     } catch (error) {
       warnings.push(`[plugin-manager] Failed to sync ${pluginDisplayName(spec)}: ${String(error)}`)
       if (previous && (await exists(previous.resolvedPath))) {
@@ -74,8 +79,44 @@ export async function resolveCachedPluginPaths(specs: ManagedPluginSpec[], lockf
   return entries
 }
 
-async function syncSinglePlugin(spec: ManagedPluginSpec, cache: CacheContext): Promise<LockEntry> {
-  if (spec.source === "npm") return syncNpmPlugin(spec, cache)
-  if (spec.source === "git") return syncGitPlugin(spec, cache)
-  return syncGithubReleasePlugin(spec, cache)
+async function syncSinglePlugin(
+  spec: ManagedPluginSpec,
+  cache: CacheContext,
+  previous: LockEntry | undefined,
+  mode: SyncMode,
+): Promise<LockEntry> {
+  if (spec.source === "npm") {
+    const lockedVersion = mode === "install" && previous?.source === "npm" ? previous.resolvedVersion : undefined
+    return syncNpmPlugin(spec, cache, { lockedVersion })
+  }
+
+  if (spec.source === "git") {
+    const lockedCommit = mode === "install" && previous?.source === "git" ? previous.commit : undefined
+    return syncGitPlugin(spec, cache, { lockedCommit })
+  }
+
+  const lockedTag = mode === "install" && previous?.source === "github-release" ? previous.tag : undefined
+  const lockedAsset = mode === "install" && previous?.source === "github-release" ? previous.asset : undefined
+  return syncGithubReleasePlugin(spec, cache, { lockedTag, lockedAsset })
+}
+
+function isCompatibleLock(spec: ManagedPluginSpec, entry: LockEntry): boolean {
+  if (spec.source === "npm" && entry.source === "npm") {
+    if (!spec.version) return true
+    return semver.valid(entry.resolvedVersion)
+      ? semver.satisfies(entry.resolvedVersion, spec.version, { includePrerelease: true })
+      : entry.resolvedVersion === spec.version
+  }
+
+  if (spec.source === "git" && entry.source === "git") {
+    if (!spec.ref) return true
+    return entry.ref === spec.ref
+  }
+
+  if (spec.source === "github-release" && entry.source === "github-release") {
+    if (!spec.tag) return true
+    return entry.tag === spec.tag
+  }
+
+  return false
 }
