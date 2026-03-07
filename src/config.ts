@@ -182,6 +182,8 @@ function directoryChain(root: string, leaf: string): string[] {
     if (current === rootResolved) break
     const parent = path.dirname(current)
     if (parent === current) break
+    const relative = path.relative(rootResolved, parent)
+    if (relative.startsWith("..") || path.isAbsolute(relative)) break
     current = parent
   }
 
