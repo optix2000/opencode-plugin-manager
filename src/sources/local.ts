@@ -1,8 +1,6 @@
-import fs from "node:fs/promises"
 import path from "node:path"
 import type { LockEntry, ManagedPluginSpec } from "../types"
-import { runCommand } from "../util"
-import { resolvePluginEntry } from "./shared"
+import { fs, resolvePluginEntry, runCommand } from "./local.deps"
 
 type LocalSpec = Extract<ManagedPluginSpec, { source: "local" }>
 

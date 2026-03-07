@@ -15,20 +15,6 @@ const mockFsStat = mock()
 const mockFsReaddir = mock()
 const mockFsRm = mock()
 
-mock.module("node:fs/promises", () => ({
-  default: {
-    readFile: mockFsReadFile,
-    writeFile: mockFsWriteFile,
-    rename: mockFsRename,
-    unlink: mockFsUnlink,
-    open: mockFsOpen,
-    realpath: mockFsRealpath,
-    stat: mockFsStat,
-    readdir: mockFsReaddir,
-    rm: mockFsRm,
-  },
-}))
-
 const mockExists = mock()
 const mockEnsureDir = mock()
 const mockSleep = mock()
@@ -43,7 +29,20 @@ function realSanitizeSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, "_")
 }
 
-mock.module("../util", () => ({
+mock.module("../cache.deps", () => ({
+  fs: {
+    readFile: mockFsReadFile,
+    writeFile: mockFsWriteFile,
+    rename: mockFsRename,
+    unlink: mockFsUnlink,
+    open: mockFsOpen,
+    realpath: mockFsRealpath,
+    stat: mockFsStat,
+    readdir: mockFsReaddir,
+    rm: mockFsRm,
+  },
+  os,
+  path,
   exists: mockExists,
   ensureDir: mockEnsureDir,
   sleep: mockSleep,

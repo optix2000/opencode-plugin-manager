@@ -9,25 +9,35 @@ const mockReadJsoncFile = mock(async (_filePath: string): Promise<unknown | null
 const mockMkdir = mock(async () => undefined)
 const mockWriteFile = mock(async () => undefined)
 
-mock.module("node:os", () => ({
-  default: { homedir: () => TEST_HOME },
-  homedir: () => TEST_HOME,
-}))
+function realNormalizeGitRepo(value: string): string {
+  return value.trim().replace(/\.git$/, "")
+}
 
-mock.module("node:fs/promises", () => ({
-  default: {
+function realParseNpmShorthand(value: string): { name: string; version?: string } {
+  const lastAtIndex = value.lastIndexOf("@")
+  if (lastAtIndex <= 0) return { name: value }
+  return {
+    name: value.slice(0, lastAtIndex),
+    version: value.slice(lastAtIndex + 1),
+  }
+}
+
+function realExpandHome(input: string): string {
+  if (input === "~") return TEST_HOME
+  if (input.startsWith("~/")) return path.join(TEST_HOME, input.slice(2))
+  return input
+}
+
+mock.module("../config.deps", () => ({
+  fs: {
     mkdir: mockMkdir,
     writeFile: mockWriteFile,
   },
-  mkdir: mockMkdir,
-  writeFile: mockWriteFile,
-}))
-
-const realUtil = await import("../util")
-
-mock.module("../util", () => ({
-  ...realUtil,
+  os: { homedir: () => TEST_HOME },
   exists: mockExists,
+  expandHome: realExpandHome,
+  normalizeGitRepo: realNormalizeGitRepo,
+  parseNpmShorthand: realParseNpmShorthand,
   readJsoncFile: mockReadJsoncFile,
 }))
 

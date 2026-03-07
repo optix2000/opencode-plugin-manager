@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test"
+import semver from "semver"
 import type { MergedConfig } from "../config"
 import type { LockEntry, Lockfile } from "../types"
 import { makeCacheContext, makeLockEntry, makeSpec } from "./helpers"
@@ -22,38 +23,21 @@ const mockFsReadFile = mock()
 const mockFetch = mock()
 const managedConfigHook = mock(async () => undefined)
 
-mock.module("@opencode-ai/plugin", () => ({
+mock.module("../index.deps", () => ({
   tool: (definition: unknown) => definition,
-}))
-
-mock.module("../config", () => ({
   loadMergedConfig: mockLoadMergedConfig,
-}))
-
-mock.module("../cache", () => ({
   resolveCacheContext: mockResolveCacheContext,
   readLockfile: mockReadLockfile,
   writeLockfile: mockWriteLockfile,
   withCacheLock: mockWithCacheLock,
   cleanCacheDirectories: mockCleanCacheDirectories,
-}))
-
-mock.module("../resolver", () => ({
   resolveCachedPluginPaths: mockResolveCachedPluginPaths,
   syncPlugins: mockSyncPlugins,
-}))
-
-mock.module("../loader", () => ({
   loadManagedPlugins: mockLoadManagedPlugins,
   mergeManagedHooks: mockMergeManagedHooks,
-}))
-
-mock.module("../util", () => ({
   exists: mockExists,
-}))
-
-mock.module("node:fs/promises", () => ({
-  default: {
+  semver,
+  fs: {
     readFile: mockFsReadFile,
   },
 }))

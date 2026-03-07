@@ -8,24 +8,9 @@ const mockFsWriteFile = mock()
 const mockFsReadFile = mock()
 const mockFsRm = mock()
 
-mock.module("node:fs/promises", () => ({
-  default: {
-    mkdtemp: mockFsMkdtemp,
-    writeFile: mockFsWriteFile,
-    readFile: mockFsReadFile,
-    rm: mockFsRm,
-  },
-}))
-
 const mockRunCommand = mock()
 const mockEnsureDir = mock()
 const mockExists = mock()
-
-mock.module("../util", () => ({
-  runCommand: mockRunCommand,
-  ensureDir: mockEnsureDir,
-  exists: mockExists,
-}))
 
 type MoveArgs = {
   targetDir: string
@@ -38,14 +23,20 @@ const mockMoveExtractedDirIntoPlace = mock(async (args: MoveArgs) => {
 })
 const mockResolvePluginEntry = mock(async (packageDir: string, entry?: string) => path.join(packageDir, entry ?? "index.js"))
 
-mock.module("../sources/shared", () => ({
-  moveExtractedDirIntoPlace: mockMoveExtractedDirIntoPlace,
-  resolvePluginEntry: mockResolvePluginEntry,
-}))
-
 const mockNpmInstallDir = mock()
 
-mock.module("../cache", () => ({
+mock.module("../sources/npm.deps", () => ({
+  fs: {
+    mkdtemp: mockFsMkdtemp,
+    writeFile: mockFsWriteFile,
+    readFile: mockFsReadFile,
+    rm: mockFsRm,
+  },
+  runCommand: mockRunCommand,
+  ensureDir: mockEnsureDir,
+  exists: mockExists,
+  moveExtractedDirIntoPlace: mockMoveExtractedDirIntoPlace,
+  resolvePluginEntry: mockResolvePluginEntry,
   npmInstallDir: mockNpmInstallDir,
 }))
 

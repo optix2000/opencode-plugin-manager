@@ -4,18 +4,15 @@ import path from "node:path"
 const mockFsRename = mock()
 const mockFsRm = mock()
 const mockFsReadFile = mock()
+const mockExists = mock()
 
-mock.module("node:fs/promises", () => ({
-  default: {
+mock.module("../sources/shared.deps", () => ({
+  fs: {
     rename: mockFsRename,
     rm: mockFsRm,
     readFile: mockFsReadFile,
   },
-}))
-
-const mockExists = mock()
-
-mock.module("../util", () => ({
+  path,
   exists: mockExists,
 }))
 

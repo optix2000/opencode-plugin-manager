@@ -6,34 +6,25 @@ import { makeCacheContext } from "./helpers"
 const mockFsMkdtemp = mock()
 const mockFsRm = mock()
 
-mock.module("node:fs/promises", () => ({
-  default: {
-    mkdtemp: mockFsMkdtemp,
-    rm: mockFsRm,
-  },
-}))
-
 const mockRunCommand = mock()
 const mockEnsureDir = mock()
 const mockExists = mock()
 
-mock.module("../util", () => ({
-  runCommand: mockRunCommand,
-  ensureDir: mockEnsureDir,
-  exists: mockExists,
-}))
-
 const mockMoveExtractedDirIntoPlace = mock()
 const mockResolvePluginEntry = mock()
 
-mock.module("../sources/shared", () => ({
-  moveExtractedDirIntoPlace: mockMoveExtractedDirIntoPlace,
-  resolvePluginEntry: mockResolvePluginEntry,
-}))
-
 const mockGitInstallDir = mock()
 
-mock.module("../cache", () => ({
+mock.module("../sources/git.deps", () => ({
+  fs: {
+    mkdtemp: mockFsMkdtemp,
+    rm: mockFsRm,
+  },
+  runCommand: mockRunCommand,
+  ensureDir: mockEnsureDir,
+  exists: mockExists,
+  moveExtractedDirIntoPlace: mockMoveExtractedDirIntoPlace,
+  resolvePluginEntry: mockResolvePluginEntry,
   gitInstallDir: mockGitInstallDir,
 }))
 

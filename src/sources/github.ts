@@ -1,11 +1,17 @@
-import fs from "node:fs/promises"
 import path from "node:path"
 import { z } from "zod"
 import type { CacheContext } from "../cache"
-import { githubInstallDir } from "../cache"
 import type { LockEntry, ManagedPluginSpec } from "../types"
-import { ensureDir, exists, runCommand, sha256File } from "../util"
-import { moveExtractedDirIntoPlace, resolvePluginEntry } from "./shared"
+import {
+  ensureDir,
+  exists,
+  fs,
+  githubInstallDir,
+  moveExtractedDirIntoPlace,
+  resolvePluginEntry,
+  runCommand,
+  sha256File,
+} from "./github.deps"
 
 type GithubSpec = Extract<ManagedPluginSpec, { source: "github-release" }>
 

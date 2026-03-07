@@ -1,7 +1,8 @@
 import type { Hooks, Plugin as PluginFactory, PluginInput } from "@opencode-ai/plugin"
 import { pathToFileURL } from "node:url"
+import type { CacheContext } from "./cache"
+import { isTrustedLockEntryPath } from "./loader.deps"
 import type { LockEntry } from "./types"
-import { isTrustedLockEntryPath, type CacheContext } from "./cache"
 
 type LoadedPlugin = {
   id: string

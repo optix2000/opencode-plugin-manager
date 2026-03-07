@@ -1,9 +1,8 @@
-import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import type { MergedConfig } from "./config"
 import { CACHEABLE_LOCK_ENTRY_SOURCES, LockfileSchema, type LockEntry, type Lockfile } from "./types"
-import { ensureDir, exists, expandHome, sanitizeSegment, sleep } from "./util"
+import { ensureDir, exists, expandHome, fs, sanitizeSegment, sleep } from "./cache.deps"
 
 const LOCKFILE_NAME = "plugins.lock.json"
 const LOCK_MUTEX_NAME = ".manager.lock"

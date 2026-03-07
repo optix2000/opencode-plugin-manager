@@ -3,22 +3,14 @@ import path from "node:path"
 import { makeSpec } from "./helpers"
 
 const mockFsStat = mock()
-
-mock.module("node:fs/promises", () => ({
-  default: {
-    stat: mockFsStat,
-  },
-}))
-
 const mockRunCommand = mock(async (_args: unknown) => ({ stdout: "", stderr: "" }))
-
-mock.module("../util", () => ({
-  runCommand: mockRunCommand,
-}))
-
 const mockResolvePluginEntry = mock(async (pluginPath: string, entry?: string) => path.join(pluginPath, entry ?? "index.js"))
 
-mock.module("../sources/shared", () => ({
+mock.module("../sources/local.deps", () => ({
+  fs: {
+    stat: mockFsStat,
+  },
+  runCommand: mockRunCommand,
   resolvePluginEntry: mockResolvePluginEntry,
 }))
 

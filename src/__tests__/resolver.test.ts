@@ -8,36 +8,20 @@ type LocalSpec = Extract<ManagedPluginSpec, { source: "local" }>
 type GithubReleaseSpec = Extract<ManagedPluginSpec, { source: "github-release" }>
 
 const mockIsTrustedLockEntryPath = mock()
-mock.module("../cache", () => ({
-  isTrustedLockEntryPath: mockIsTrustedLockEntryPath,
-}))
-
 const mockExists = mock()
-mock.module("../util", () => ({
-  exists: mockExists,
-}))
 
 const mockSyncNpmPlugin = mock()
-mock.module("../sources/npm", () => ({
-  syncNpmPlugin: mockSyncNpmPlugin,
-}))
-
 const mockSyncGitPlugin = mock()
-mock.module("../sources/git", () => ({
-  syncGitPlugin: mockSyncGitPlugin,
-}))
-
 const mockSyncLocalPlugin = mock()
-mock.module("../sources/local", () => ({
-  syncLocalPlugin: mockSyncLocalPlugin,
-}))
-
 const mockSyncGithubReleasePlugin = mock()
-mock.module("../sources/github", () => ({
-  syncGithubReleasePlugin: mockSyncGithubReleasePlugin,
-}))
 
-mock.module("../config", () => ({
+mock.module("../resolver.deps", () => ({
+  isTrustedLockEntryPath: mockIsTrustedLockEntryPath,
+  exists: mockExists,
+  syncNpmPlugin: mockSyncNpmPlugin,
+  syncGitPlugin: mockSyncGitPlugin,
+  syncLocalPlugin: mockSyncLocalPlugin,
+  syncGithubReleasePlugin: mockSyncGithubReleasePlugin,
   pluginDisplayName: (spec: { id: string }) => spec.id,
 }))
 

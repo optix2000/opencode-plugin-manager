@@ -1,10 +1,15 @@
-import fs from "node:fs/promises"
 import path from "node:path"
 import type { CacheContext } from "../cache"
-import { npmInstallDir } from "../cache"
 import type { LockEntry, ManagedPluginSpec } from "../types"
-import { ensureDir, exists, runCommand } from "../util"
-import { moveExtractedDirIntoPlace, resolvePluginEntry } from "./shared"
+import {
+  ensureDir,
+  exists,
+  fs,
+  moveExtractedDirIntoPlace,
+  npmInstallDir,
+  resolvePluginEntry,
+  runCommand,
+} from "./npm.deps"
 
 type NpmSpec = Extract<ManagedPluginSpec, { source: "npm" }>
 

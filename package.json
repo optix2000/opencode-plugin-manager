@@ -6,7 +6,7 @@
   "main": "src/index.ts",
   "license": "MIT",
   "scripts": {
-    "test": "for f in src/__tests__/*.test.ts; do bun test \"$f\" || exit 1; done",
+    "test": "bun test",
     "typecheck": "npx tsc --noEmit"
   },
   "peerDependencies": {

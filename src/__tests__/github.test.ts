@@ -8,26 +8,10 @@ const mockFsWriteFile = mock(async (_filePath: string, _data: Buffer) => undefin
 const mockFsRm = mock(async (_filePath: string, _options: { recursive: boolean; force: boolean }) => undefined)
 const mockFsCopyFile = mock(async (_from: string, _to: string) => undefined)
 
-mock.module("node:fs/promises", () => ({
-  default: {
-    mkdtemp: mockFsMkdtemp,
-    writeFile: mockFsWriteFile,
-    rm: mockFsRm,
-    copyFile: mockFsCopyFile,
-  },
-}))
-
 const mockRunCommand = mock(async (_args: unknown) => ({ stdout: "", stderr: "" }))
 const mockSha256File = mock(async (_filePath: string) => "sha256-default")
 const mockExists = mock(async (_filePath: string) => true)
 const mockEnsureDir = mock(async (_filePath: string) => undefined)
-
-mock.module("../util", () => ({
-  runCommand: mockRunCommand,
-  sha256File: mockSha256File,
-  exists: mockExists,
-  ensureDir: mockEnsureDir,
-}))
 
 type MoveArgs = {
   targetDir: string
@@ -42,14 +26,21 @@ const mockResolvePluginEntry = mock(async (installDir: string, entry?: string) =
   path.join(installDir, entry ?? "index.js"),
 )
 
-mock.module("../sources/shared", () => ({
-  moveExtractedDirIntoPlace: mockMoveExtractedDirIntoPlace,
-  resolvePluginEntry: mockResolvePluginEntry,
-}))
-
 const mockGithubInstallDir = mock((_cache: unknown, repo: string, tag: string) => `/cache/github/${repo}/${tag}`)
 
-mock.module("../cache", () => ({
+mock.module("../sources/github.deps", () => ({
+  fs: {
+    mkdtemp: mockFsMkdtemp,
+    writeFile: mockFsWriteFile,
+    rm: mockFsRm,
+    copyFile: mockFsCopyFile,
+  },
+  runCommand: mockRunCommand,
+  sha256File: mockSha256File,
+  exists: mockExists,
+  ensureDir: mockEnsureDir,
+  moveExtractedDirIntoPlace: mockMoveExtractedDirIntoPlace,
+  resolvePluginEntry: mockResolvePluginEntry,
   githubInstallDir: mockGithubInstallDir,
 }))
 

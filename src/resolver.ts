@@ -1,11 +1,14 @@
-import { isTrustedLockEntryPath, type CacheContext } from "./cache"
+import type { CacheContext } from "./cache"
+import {
+  exists,
+  isTrustedLockEntryPath,
+  pluginDisplayName,
+  syncGitPlugin,
+  syncGithubReleasePlugin,
+  syncLocalPlugin,
+  syncNpmPlugin,
+} from "./resolver.deps"
 import type { LockEntry, Lockfile, ManagedPluginSpec } from "./types"
-import { exists } from "./util"
-import { syncGitPlugin } from "./sources/git"
-import { syncGithubReleasePlugin } from "./sources/github"
-import { syncLocalPlugin } from "./sources/local"
-import { syncNpmPlugin } from "./sources/npm"
-import { pluginDisplayName } from "./config"
 import semver from "semver"
 
 export type SyncMode = "install" | "update"

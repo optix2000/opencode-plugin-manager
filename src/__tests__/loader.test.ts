@@ -3,7 +3,7 @@ import { makeCacheContext, makeLockEntry } from "./helpers"
 
 const mockIsTrustedLockEntryPath = mock()
 
-mock.module("../cache", () => ({
+mock.module("../loader.deps", () => ({
   isTrustedLockEntryPath: mockIsTrustedLockEntryPath,
 }))
 

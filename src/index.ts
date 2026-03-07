@@ -1,12 +1,22 @@
-import { tool, type Hooks, type Plugin, type ToolContext } from "@opencode-ai/plugin"
-import { cleanCacheDirectories, readLockfile, resolveCacheContext, withCacheLock, writeLockfile } from "./cache"
-import { loadMergedConfig } from "./config"
-import { loadManagedPlugins, mergeManagedHooks } from "./loader"
-import { resolveCachedPluginPaths, syncPlugins, type SyncMode } from "./resolver"
-import fs from "node:fs/promises"
+import type { Plugin, ToolContext } from "@opencode-ai/plugin"
 import semver from "semver"
+import {
+  cleanCacheDirectories,
+  exists,
+  fs,
+  loadManagedPlugins,
+  loadMergedConfig,
+  mergeManagedHooks,
+  readLockfile,
+  resolveCacheContext,
+  resolveCachedPluginPaths,
+  syncPlugins,
+  tool,
+  withCacheLock,
+  writeLockfile,
+} from "./index.deps"
+import type { SyncMode } from "./resolver"
 import type { Lockfile } from "./types"
-import { exists } from "./util"
 
 export const PluginManager: Plugin = async (input) => {
   let mergedConfig = await loadMergedConfig(input)

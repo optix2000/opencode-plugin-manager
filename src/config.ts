@@ -1,9 +1,7 @@
 import type { PluginInput as RuntimePluginInput } from "@opencode-ai/plugin"
-import fs from "node:fs/promises"
-import os from "node:os"
 import path from "node:path"
 import { PluginsFileSchema, type ManagedPluginSpec, type NormalizedPluginSpec, type PluginsFile } from "./types"
-import { exists, expandHome, normalizeGitRepo, parseNpmShorthand, readJsoncFile } from "./util"
+import { exists, expandHome, fs, normalizeGitRepo, os, parseNpmShorthand, readJsoncFile } from "./config.deps"
 
 const CONFIG_FILENAMES = ["plugins.json", "plugins.jsonc"]
 
