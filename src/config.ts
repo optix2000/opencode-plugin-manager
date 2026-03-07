@@ -51,7 +51,7 @@ export function pluginDisplayName(spec: ManagedPluginSpec): string {
   if (spec.source === "local") return spec.path
   if (spec.source === "github-release") return spec.tag ? `${spec.repo}@${spec.tag}` : spec.repo
   const _exhaustive: never = spec
-  return _exhaustive
+  throw new Error(`Unhandled plugin source in pluginDisplayName: ${JSON.stringify(_exhaustive)}`)
 }
 
 function normalizePlugin(plugin: PluginsFile["plugins"][number], fromFile: string): ManagedPluginSpec {
