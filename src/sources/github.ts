@@ -118,9 +118,11 @@ function escapeRegex(value: string): string {
 
 async function fetchRelease(spec: GithubSpec, lockedTag?: string): Promise<GithubRelease> {
   const tag = lockedTag ?? spec.tag
+  const [owner, repo] = spec.repo.split("/")
+  const encodedRepo = `${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`
   const endpoint = tag
-    ? `https://api.github.com/repos/${spec.repo}/releases/tags/${encodeURIComponent(tag)}`
-    : `https://api.github.com/repos/${spec.repo}/releases/latest`
+    ? `https://api.github.com/repos/${encodedRepo}/releases/tags/${encodeURIComponent(tag)}`
+    : `https://api.github.com/repos/${encodedRepo}/releases/latest`
 
   const response = await fetch(endpoint, { headers: githubHeaders() })
   if (!response.ok) {

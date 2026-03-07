@@ -29,9 +29,11 @@ const LocalPluginSchema = z.object({
   build: BuildSchema.optional(),
 })
 
+const GITHUB_REPO_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/
+
 const GithubReleasePluginSchema = z.object({
   source: z.literal("github-release"),
-  repo: z.string().regex(/^[^/]+\/[^/]+$/),
+  repo: z.string().regex(GITHUB_REPO_PATTERN),
   tag: z.string().min(1).optional(),
   asset: z.string().min(1).optional(),
   entry: z.string().min(1).optional(),
@@ -120,7 +122,7 @@ const LocalLockEntrySchema = LockEntryBaseSchema.extend({
 
 const GithubReleaseLockEntrySchema = LockEntryBaseSchema.extend({
   source: z.literal("github-release"),
-  repo: z.string().regex(/^[^/]+\/[^/]+$/),
+  repo: z.string().regex(GITHUB_REPO_PATTERN),
   tag: z.string().min(1),
   asset: z.string().min(1).optional(),
 })
