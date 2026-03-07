@@ -115,9 +115,11 @@ export const PluginManager: Plugin = async (input) => {
 
     mergedConfig = await loadMergedConfig(input)
     cache = resolveCacheContext(mergedConfig)
+    let previousLock: Lockfile = { version: 1, plugins: {} }
 
     const result = await withCacheLock(cache, async () => {
       const current = await readLockfile(cache.lockfilePath)
+      previousLock = current
       const synced = await syncPlugins({
         specs: mergedConfig.plugins,
         cache,
@@ -141,6 +143,14 @@ export const PluginManager: Plugin = async (input) => {
     if (result.updated.length) lines.push(`${verb}: ${result.updated.join(", ")}`)
     if (result.reused.length) lines.push(`Reused cache: ${result.reused.join(", ")}`)
     if (result.warnings.length) lines.push(`Warnings: ${result.warnings.length}`)
+    if (mergedConfig.plugins.length) {
+      lines.push("State transitions:")
+      for (const spec of mergedConfig.plugins) {
+        const previous = describeLockState(previousLock.plugins[spec.id])
+        const next = describeLockState(result.lockfile.plugins[spec.id])
+        lines.push(`${spec.id}: ${previous} -> ${next}`)
+      }
+    }
     lines.push("Restart opencode to register newly added tools/auth hooks.")
 
     return lines.join("\n")
@@ -184,6 +194,28 @@ export const PluginManager: Plugin = async (input) => {
 }
 
 export default PluginManager
+
+function describeLockState(entry: Lockfile["plugins"][string] | undefined): string {
+  if (!entry) {
+    return "not installed"
+  }
+
+  if (entry.source === "npm") {
+    return `npm:${entry.name}@${entry.resolvedVersion}`
+  }
+
+  if (entry.source === "git") {
+    const ref = entry.ref ? `#${entry.ref}` : ""
+    return `git:${entry.repo}${ref}@${entry.commit}`
+  }
+
+  if (entry.source === "local") {
+    return `local:${entry.resolvedPath}`
+  }
+
+  const _exhaustive: never = entry
+  throw new Error(`Unhandled lock entry source in describeLockState: ${JSON.stringify(_exhaustive)}`)
+}
 
 async function getCurrentPluginManagerVersion(): Promise<string | undefined> {
   try {

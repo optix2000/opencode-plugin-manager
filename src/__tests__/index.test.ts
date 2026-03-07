@@ -191,7 +191,13 @@ describe("opm.install", () => {
     const spec = makeSpec("npm", { id: "npm:install", name: "install-plugin" })
     const mergedConfig = makeMergedConfig({ plugins: [spec] })
     const cache = makeCacheContext("/cache/install")
-    const currentLock = makeLockfile()
+    const previousEntry = makeLockEntry("npm", {
+      id: spec.id,
+      name: spec.name,
+      resolvedVersion: "1.5.0",
+      resolvedPath: "/cache/install/npm/install-plugin@1.5.0/index.js",
+    })
+    const currentLock = makeLockfile({ [spec.id]: previousEntry })
     const updatedEntry = makeLockEntry("npm", {
       id: spec.id,
       name: spec.name,
@@ -234,6 +240,8 @@ describe("opm.install", () => {
       expect(output).toContain(`Installed: ${spec.id} (install)`)
       expect(output).toContain("Reused cache: npm:cached-plugin")
       expect(output).toContain("Warnings: 1")
+      expect(output).toContain("State transitions:")
+      expect(output).toContain(`${spec.id}: npm:${spec.name}@1.5.0 -> npm:${spec.name}@2.0.0`)
     } finally {
       warnSpy.mockRestore()
     }
@@ -248,6 +256,14 @@ describe("opm.update", () => {
       ref: "main",
     })
     const mergedConfig = makeMergedConfig({ plugins: [spec] })
+    const currentLock = makeLockfile({
+      [spec.id]: makeLockEntry("git", {
+        id: spec.id,
+        repo: spec.repo,
+        ref: spec.ref,
+        commit: "old-commit",
+      }),
+    })
     const syncedLock = makeLockfile({
       [spec.id]: makeLockEntry("git", {
         id: spec.id,
@@ -258,6 +274,7 @@ describe("opm.update", () => {
     })
 
     mockLoadMergedConfig.mockResolvedValue(mergedConfig)
+    mockReadLockfile.mockResolvedValue(currentLock)
     mockSyncPlugins.mockResolvedValue({
       lockfile: syncedLock,
       updated: [`${spec.id} (update)`],
@@ -278,6 +295,8 @@ describe("opm.update", () => {
     )
     expect(output).toContain("Updated 1 plugin(s).")
     expect(output).toContain(`Updated: ${spec.id} (update)`)
+    expect(output).toContain("State transitions:")
+    expect(output).toContain(`${spec.id}: git:${spec.repo}#${spec.ref}@old-commit -> git:${spec.repo}#${spec.ref}@new-commit`)
   })
 })
 

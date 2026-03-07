@@ -54,6 +54,7 @@ Run tools from opencode:
 - `opm.self-update` checks npm for a newer `opencode-plugin-manager` release and tells you what to pin in `opencode.json`.
 
 Install/update writes `plugins.lock.json` in the configured cache directory.
+Install/update output also includes per-plugin state transitions (`before -> after`) with resolved versions/commits.
 
 ## Slash command templates
 
