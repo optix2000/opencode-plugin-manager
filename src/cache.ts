@@ -51,8 +51,13 @@ export async function readLockfile(lockfilePath: string): Promise<Lockfile> {
 export async function writeLockfile(lockfilePath: string, lockfile: Lockfile): Promise<void> {
   await ensureDir(path.dirname(lockfilePath))
   const tempPath = `${lockfilePath}.${process.pid}.tmp`
-  await fs.writeFile(tempPath, `${JSON.stringify(lockfile, null, 2)}\n`, "utf8")
-  await fs.rename(tempPath, lockfilePath)
+  try {
+    await fs.writeFile(tempPath, `${JSON.stringify(lockfile, null, 2)}\n`, "utf8")
+    await fs.rename(tempPath, lockfilePath)
+  } catch (error) {
+    await fs.unlink(tempPath).catch(() => undefined)
+    throw error
+  }
 }
 
 export async function withCacheLock<T>(
