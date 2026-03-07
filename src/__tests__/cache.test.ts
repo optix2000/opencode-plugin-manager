@@ -155,7 +155,7 @@ describe("resolveCacheContext", () => {
       plugins: [],
     }
 
-    const rootDir = path.join("/tmp/xdg-cache", "opencode", "plugins")
+    const rootDir = path.join("/tmp/xdg-cache", "opencode", "opm")
     expect(cache.resolveCacheContext(config)).toEqual({
       rootDir,
       lockfilePath: path.join(rootDir, "plugins.lock.json"),
@@ -163,7 +163,7 @@ describe("resolveCacheContext", () => {
     })
   })
 
-  test("falls back to ~/.cache/opencode/plugins when XDG_CACHE_HOME is unset", () => {
+  test("falls back to ~/.cache/opencode/opm when XDG_CACHE_HOME is unset", () => {
     delete process.env.XDG_CACHE_HOME
 
     const config: MergedConfig = {
@@ -171,7 +171,7 @@ describe("resolveCacheContext", () => {
       plugins: [],
     }
 
-    const rootDir = path.join(os.homedir(), ".cache", "opencode", "plugins")
+    const rootDir = path.join(os.homedir(), ".cache", "opencode", "opm")
     expect(cache.resolveCacheContext(config)).toEqual({
       rootDir,
       lockfilePath: path.join(rootDir, "plugins.lock.json"),

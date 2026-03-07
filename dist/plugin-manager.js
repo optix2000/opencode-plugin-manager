@@ -6888,7 +6888,7 @@ var LOCK_MUTEX_NAME = ".manager.lock";
 var DEFAULT_LOCK_TIMEOUT_MS = 30000;
 var DEFAULT_LOCK_RETRY_MS = 125;
 function resolveCacheContext(config) {
-  const configured = config.cacheDir ? path2.resolve(config.cacheDirBase ?? process.cwd(), expandHome(config.cacheDir)) : path2.join(process.env.XDG_CACHE_HOME ?? path2.join(os2.homedir(), ".cache"), "opencode", "plugins");
+  const configured = config.cacheDir ? path2.resolve(config.cacheDirBase ?? process.cwd(), expandHome(config.cacheDir)) : path2.join(process.env.XDG_CACHE_HOME ?? path2.join(os2.homedir(), ".cache"), "opencode", "opm");
   return {
     rootDir: configured,
     lockfilePath: path2.join(configured, LOCKFILE_NAME),

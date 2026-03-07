@@ -29,8 +29,8 @@ Create `plugins.json` (or `plugins.jsonc`) in your global opencode config direct
 
 ```jsonc
 {
-  "$schema": "./plugins.schema.json",
-  "cacheDir": "~/.cache/opencode/plugins",
+  "$schema": "https://raw.githubusercontent.com/optix2000/opencode-plugin-manager/main/plugins.schema.json",
+  "cacheDir": "~/.cache/opencode/opm",
   "plugins": [
     "example-plugin@1.2.3",
     "./plugins/my-local-plugin",

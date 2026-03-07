@@ -20,7 +20,7 @@ export type CacheContext = {
 export function resolveCacheContext(config: MergedConfig): CacheContext {
   const configured = config.cacheDir
     ? path.resolve(config.cacheDirBase ?? process.cwd(), expandHome(config.cacheDir))
-    : path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"), "opencode", "plugins")
+    : path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"), "opencode", "opm")
 
   return {
     rootDir: configured,
