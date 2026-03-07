@@ -66,18 +66,21 @@ export const PluginManager: Plugin = async (input) => {
     },
   })
 
-  const tools: NonNullable<Hooks["tool"]> = {
-    ...(mergedHooks.tool ?? {}),
-    "opm.install": installTool,
-    "opm.update": updateTool,
-    "opm.clean": cleanTool,
-    "opm.sync": syncTool,
-    "opm.self-update": selfUpdateTool,
-  }
-
   return {
     ...mergedHooks,
-    tool: tools,
+    get auth() {
+      return mergedHooks.auth
+    },
+    get tool() {
+      return {
+        ...(mergedHooks.tool ?? {}),
+        "opm.install": installTool,
+        "opm.update": updateTool,
+        "opm.clean": cleanTool,
+        "opm.sync": syncTool,
+        "opm.self-update": selfUpdateTool,
+      }
+    },
     async config(config) {
       await mergedHooks.config?.(config)
 

@@ -63,6 +63,43 @@ export async function loadManagedPlugins(
 
 export function mergeManagedHooks(getLoaded: () => LoadedPlugin[]): Hooks {
   const merged: Hooks = {}
+  const warnedToolCollisions = new Set<string>()
+  const warnedAuthCollisions = new Set<string>()
+
+  const collectToolAndAuth = (): {
+    tools: NonNullable<Hooks["tool"]>
+    auth: Hooks["auth"]
+  } => {
+    const tools: NonNullable<Hooks["tool"]> = {}
+    let auth: Hooks["auth"]
+
+    for (const plugin of getLoaded()) {
+      if (plugin.hooks.tool) {
+        for (const [name, definition] of Object.entries(plugin.hooks.tool)) {
+          if (tools[name]) {
+            const collisionKey = `${name}:${plugin.id}`
+            if (!warnedToolCollisions.has(collisionKey)) {
+              console.warn(`[plugin-manager] Tool collision for '${name}', overriding with ${plugin.id}`)
+              warnedToolCollisions.add(collisionKey)
+            }
+          }
+          tools[name] = definition
+        }
+      }
+
+      if (plugin.hooks.auth) {
+        if (auth) {
+          if (!warnedAuthCollisions.has(plugin.id)) {
+            console.warn(`[plugin-manager] Auth hook collision, overriding with ${plugin.id}`)
+            warnedAuthCollisions.add(plugin.id)
+          }
+        }
+        auth = plugin.hooks.auth
+      }
+    }
+
+    return { tools, auth }
+  }
 
   merged.event = async (input) => {
     for (const plugin of getLoaded()) {
@@ -100,33 +137,21 @@ export function mergeManagedHooks(getLoaded: () => LoadedPlugin[]): Hooks {
     ;(merged as Record<string, unknown>)[hookName] = fn
   }
 
-  const tools: NonNullable<Hooks["tool"]> = {}
-  let auth: Hooks["auth"]
+  Object.defineProperty(merged, "tool", {
+    configurable: true,
+    get: () => {
+      const { tools } = collectToolAndAuth()
+      return Object.keys(tools).length ? tools : undefined
+    },
+  })
 
-  for (const plugin of getLoaded()) {
-    if (plugin.hooks.tool) {
-      for (const [name, definition] of Object.entries(plugin.hooks.tool)) {
-        if (tools[name]) {
-          console.warn(`[plugin-manager] Tool collision for '${name}', overriding with ${plugin.id}`)
-        }
-        tools[name] = definition
-      }
-    }
-
-    if (plugin.hooks.auth) {
-      if (auth) {
-        console.warn(`[plugin-manager] Auth hook collision, overriding with ${plugin.id}`)
-      }
-      auth = plugin.hooks.auth
-    }
-  }
-
-  if (Object.keys(tools).length) {
-    merged.tool = tools
-  }
-  if (auth) {
-    merged.auth = auth
-  }
+  Object.defineProperty(merged, "auth", {
+    configurable: true,
+    get: () => {
+      const { auth } = collectToolAndAuth()
+      return auth
+    },
+  })
 
   return merged
 }
