@@ -17,12 +17,21 @@ export async function syncGitPlugin(
   const cloneDir = path.join(tempDir, "repo")
 
   try {
-    await runCommand({ command: "git", args: ["clone", spec.repo, cloneDir] })
+    await runCommand({
+      command: "git",
+      args: ["-c", "core.hooksPath=/dev/null", "clone", spec.repo, cloneDir],
+    })
 
     if (options.lockedCommit) {
-      await runCommand({ command: "git", args: ["-C", cloneDir, "checkout", options.lockedCommit] })
+      await runCommand({
+        command: "git",
+        args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "checkout", options.lockedCommit],
+      })
     } else if (spec.ref) {
-      await runCommand({ command: "git", args: ["-C", cloneDir, "checkout", spec.ref] })
+      await runCommand({
+        command: "git",
+        args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "checkout", spec.ref],
+      })
     }
 
     const commit = (await runCommand({
