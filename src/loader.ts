@@ -39,20 +39,26 @@ export async function loadManagedPlugins(
       }
       const moduleUrl = pathToFileURL(entry.resolvedPath).href
       const mod = (await import(moduleUrl)) as Record<string, unknown>
-      const seen = new Set<PluginFactory>()
+      const defaultExport = mod.default
+      let pluginFactory: PluginFactory | undefined
 
-      for (const exported of Object.values(mod)) {
-        if (typeof exported !== "function") continue
-        const pluginFactory = exported as PluginFactory
-        if (seen.has(pluginFactory)) continue
-        seen.add(pluginFactory)
-
-        const hooks = await pluginFactory(input)
-        loaded.push({
-          id: entry.id,
-          hooks,
-        })
+      if (typeof defaultExport === "function") {
+        pluginFactory = defaultExport as PluginFactory
+      } else {
+        const namedExports = Object.entries(mod).filter(([name]) => name !== "default")
+        if (namedExports.length !== 1 || typeof namedExports[0][1] !== "function") {
+          throw new Error(
+            "Plugin module must export a default function or exactly one named function export",
+          )
+        }
+        pluginFactory = namedExports[0][1] as PluginFactory
       }
+
+      const hooks = await pluginFactory(input)
+      loaded.push({
+        id: entry.id,
+        hooks,
+      })
     } catch (error) {
       console.warn(`[plugin-manager] Failed to load ${entry.id}: ${String(error)}`)
     }
