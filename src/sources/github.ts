@@ -193,7 +193,10 @@ async function materializeAsset(downloadPath: string, outputDir: string): Promis
   await fs.copyFile(downloadPath, target)
 }
 
-async function assertArchiveEntriesSafe(downloadPath: string, format: "zip" | "tar.gz" | "tar.xz" | "tar"): Promise<void> {
+async function assertArchiveEntriesSafe(
+  downloadPath: string,
+  format: "zip" | "tar.gz" | "tar.xz" | "tar",
+): Promise<void> {
   const command = format === "zip" ? "unzip" : "tar"
   const args =
     format === "zip"

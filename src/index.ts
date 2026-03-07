@@ -16,7 +16,7 @@ export const PluginManager: Plugin = async (input) => {
   const initialEntries = await resolveCachedPluginPaths(mergedConfig.plugins, initialLockfile, cache)
   let loaded = await loadManagedPlugins(initialEntries, input, cache)
 
-  const mergedHooks = mergeManagedHooks(() => loaded)
+  const managed = mergeManagedHooks(() => loaded)
 
   const installTool = tool({
     description: "Install managed plugins without advancing locked versions",
@@ -68,13 +68,13 @@ export const PluginManager: Plugin = async (input) => {
   })
 
   return {
-    ...mergedHooks,
+    ...managed.hooks,
     get auth() {
-      return mergedHooks.auth
+      return managed.collectAuth()
     },
     get tool() {
       return {
-        ...(mergedHooks.tool ?? {}),
+        ...managed.collectTools(),
         "opm.install": installTool,
         "opm.update": updateTool,
         "opm.clean": cleanTool,
@@ -83,7 +83,7 @@ export const PluginManager: Plugin = async (input) => {
       }
     },
     async config(config) {
-      await mergedHooks.config?.(config)
+      await managed.hooks.config?.(config)
 
       if (!mergedConfig.files.length) {
         console.info("[plugin-manager] No plugins.json found")
