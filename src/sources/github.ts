@@ -72,11 +72,11 @@ export async function syncGithubReleasePlugin(
       targetDir,
       extractedDir,
       validateExistingDir: async (installDir) => {
-        await resolvePluginEntry(installDir, spec.entry ?? maybeDirectFileEntry(asset.name, installDir))
+        await resolvePluginEntry(installDir, spec.entry ?? maybeDirectFileEntry(asset.name))
       },
     })
 
-    const resolvedPath = await resolvePluginEntry(targetDir, spec.entry ?? maybeDirectFileEntry(asset.name, targetDir))
+    const resolvedPath = await resolvePluginEntry(targetDir, spec.entry ?? maybeDirectFileEntry(asset.name))
 
     return {
       id: spec.id,
@@ -95,12 +95,12 @@ export async function syncGithubReleasePlugin(
   }
 }
 
-function maybeDirectFileEntry(assetName: string, rootDir: string): string | undefined {
+function maybeDirectFileEntry(assetName: string): string | undefined {
   const lower = assetName.toLowerCase()
   if (lower.endsWith(".zip") || lower.endsWith(".tar") || lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) {
     return undefined
   }
-  return path.relative(rootDir, path.join(rootDir, assetName))
+  return assetName
 }
 
 function selectAsset(release: GithubRelease, requestedAsset?: string): GithubRelease["assets"][number] | undefined {
