@@ -4,7 +4,6 @@ import {
   isTrustedLockEntryPath,
   pluginDisplayName,
   syncGitPlugin,
-  syncGithubReleasePlugin,
   syncLocalPlugin,
   syncNpmPlugin,
 } from "./resolver.deps"
@@ -117,9 +116,8 @@ async function syncSinglePlugin(
     return syncLocalPlugin(spec)
   }
 
-  const lockedTag = mode === "install" && previous?.source === "github-release" ? previous.tag : undefined
-  const lockedAsset = mode === "install" && previous?.source === "github-release" ? previous.asset : undefined
-  return syncGithubReleasePlugin(spec, cache, { lockedTag, lockedAsset })
+  const _exhaustive: never = spec
+  throw new Error(`Unhandled plugin source in syncSinglePlugin: ${JSON.stringify(_exhaustive)}`)
 }
 
 function isCompatibleLock(spec: ManagedPluginSpec, entry: LockEntry): boolean {
@@ -137,11 +135,6 @@ function isCompatibleLock(spec: ManagedPluginSpec, entry: LockEntry): boolean {
 
   if (spec.source === "local" && entry.source === "local") {
     return entry.path === spec.path && entry.entry === spec.entry
-  }
-
-  if (spec.source === "github-release" && entry.source === "github-release") {
-    if (!spec.tag) return true
-    return entry.tag === spec.tag
   }
 
   return false

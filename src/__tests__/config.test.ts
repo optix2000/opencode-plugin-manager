@@ -1,8 +1,10 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
+import { beforeEach, describe, expect, mock, test } from "bun:test"
 import path from "node:path"
 import { makeSpec } from "./helpers"
 
 const TEST_HOME = "/home/testuser"
+const GLOBAL_CONFIG_JSON = path.join(TEST_HOME, ".config", "opencode", "plugins.json")
+const GLOBAL_CONFIG_JSONC = path.join(TEST_HOME, ".config", "opencode", "plugins.jsonc")
 
 const mockExists = mock(async (_filePath: string) => false)
 const mockReadJsoncFile = mock(async (_filePath: string): Promise<unknown | null> => null)
@@ -63,13 +65,7 @@ function setConfigFiles(configByFile: Record<string, unknown | null>): void {
   })
 }
 
-let previousConfigDir: string | undefined
-
-
 beforeEach(() => {
-  previousConfigDir = process.env.OPENCODE_CONFIG_DIR
-  delete process.env.OPENCODE_CONFIG_DIR
-
   mockExists.mockClear()
   mockReadJsoncFile.mockClear()
   mockMkdir.mockClear()
@@ -77,11 +73,6 @@ beforeEach(() => {
 
   mockExists.mockImplementation(async () => false)
   mockReadJsoncFile.mockImplementation(async () => null)
-})
-
-afterEach(() => {
-  if (previousConfigDir === undefined) delete process.env.OPENCODE_CONFIG_DIR
-  else process.env.OPENCODE_CONFIG_DIR = previousConfigDir
 })
 
 describe("pluginDisplayName", () => {
@@ -109,37 +100,48 @@ describe("pluginDisplayName", () => {
     expect(pluginDisplayName(makeSpec("local", { path: "/local/plugin" }))).toBe("/local/plugin")
   })
 
-  test("formats github-release plugin with tag", () => {
-    expect(pluginDisplayName(makeSpec("github-release", { repo: "owner/repo", tag: "v1.0.0" }))).toBe(
-      "owner/repo@v1.0.0",
-    )
-  })
-
-  test("formats github-release plugin without tag", () => {
-    expect(pluginDisplayName(makeSpec("github-release", { repo: "owner/repo", tag: undefined }))).toBe("owner/repo")
-  })
 })
 
 describe("loadMergedConfig", () => {
-  test("normalizes string shorthands and object plugin sources", async () => {
-    const configFile = "/repo/plugins.json"
-    setExistingFiles([configFile])
+  test("only loads global config files", async () => {
+    const workspaceFile = "/repo/.opencode/plugins.json"
+    const envOverrideFile = "/tmp/custom/plugins.json"
+
+    process.env.OPENCODE_CONFIG_DIR = "/tmp/custom"
+    setExistingFiles([GLOBAL_CONFIG_JSON, workspaceFile, envOverrideFile])
     setConfigFiles({
-      [configFile]: {
+      [GLOBAL_CONFIG_JSON]: { plugins: ["global@1.0"] },
+      [workspaceFile]: { plugins: ["workspace@1.0"] },
+      [envOverrideFile]: { plugins: ["env@1.0"] },
+    })
+
+    try {
+      const result = await loadMergedConfig(input("/repo", "/repo"))
+      expect(result.files).toEqual([path.resolve(GLOBAL_CONFIG_JSON)])
+      expect(result.plugins).toHaveLength(1)
+      expect(result.plugins[0]).toMatchObject({ id: "npm:global", version: "1.0" })
+    } finally {
+      delete process.env.OPENCODE_CONFIG_DIR
+    }
+  })
+
+  test("normalizes string shorthands and object plugin sources", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON])
+    setConfigFiles({
+      [GLOBAL_CONFIG_JSON]: {
         plugins: [
           "foo@1.0",
           "./plugin",
           "~/my-plugin",
           "/abs/path",
           { source: "git", repo: "https://github.com/Org/Repo.git" },
-          { source: "github-release", repo: "Owner/MyPlugin", tag: "v2.0.0" },
         ],
       },
     })
 
     const result = await loadMergedConfig(input("/repo", "/repo"))
 
-    expect(result.files).toEqual([path.resolve(configFile)])
+    expect(result.files).toEqual([path.resolve(GLOBAL_CONFIG_JSON)])
 
     const byId = new Map(result.plugins.map((plugin) => [plugin.id, plugin]))
 
@@ -148,100 +150,61 @@ describe("loadMergedConfig", () => {
       id: "npm:foo",
       name: "foo",
       version: "1.0",
-      fromFile: path.resolve(configFile),
+      fromFile: path.resolve(GLOBAL_CONFIG_JSON),
     })
 
-    expect(byId.get(`local:${path.resolve("/repo", "./plugin")}`)).toMatchObject({
+    expect(byId.get(`local:${path.resolve(path.dirname(GLOBAL_CONFIG_JSON), "./plugin")}`)).toMatchObject({
       source: "local",
-      path: path.resolve("/repo", "./plugin"),
-      fromFile: path.resolve(configFile),
+      path: path.resolve(path.dirname(GLOBAL_CONFIG_JSON), "./plugin"),
+      fromFile: path.resolve(GLOBAL_CONFIG_JSON),
     })
 
     expect(byId.get(`local:${path.join(TEST_HOME, "my-plugin")}`)).toMatchObject({
       source: "local",
       path: path.join(TEST_HOME, "my-plugin"),
-      fromFile: path.resolve(configFile),
+      fromFile: path.resolve(GLOBAL_CONFIG_JSON),
     })
 
     expect(byId.get("local:/abs/path")).toMatchObject({
       source: "local",
       path: "/abs/path",
-      fromFile: path.resolve(configFile),
+      fromFile: path.resolve(GLOBAL_CONFIG_JSON),
     })
 
     expect(byId.get("git:https://github.com/Org/Repo")).toMatchObject({
       source: "git",
       repo: "https://github.com/Org/Repo",
-      fromFile: path.resolve(configFile),
+      fromFile: path.resolve(GLOBAL_CONFIG_JSON),
     })
 
-    expect(byId.get("github-release:owner/myplugin")).toMatchObject({
-      source: "github-release",
-      repo: "owner/myplugin",
-      tag: "v2.0.0",
-      fromFile: path.resolve(configFile),
-    })
   })
 
-  test("merges by plugin id and lets later files win", async () => {
-    const rootFile = "/repo/plugins.json"
-    const leafFile = "/repo/subdir/plugins.json"
-
-    setExistingFiles([rootFile, leafFile])
+  test("merges by plugin id and lets plugins.jsonc override plugins.json", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON, GLOBAL_CONFIG_JSONC])
     setConfigFiles({
-      [rootFile]: { plugins: ["foo@1.0"] },
-      [leafFile]: { plugins: ["foo@2.0"] },
+      [GLOBAL_CONFIG_JSON]: { plugins: ["foo@1.0"] },
+      [GLOBAL_CONFIG_JSONC]: { plugins: ["foo@2.0"] },
     })
 
     const result = await loadMergedConfig(input("/repo", "/repo/subdir"))
 
-    expect(result.files).toEqual([path.resolve(rootFile), path.resolve(leafFile)])
+    expect(result.files).toEqual([path.resolve(GLOBAL_CONFIG_JSON), path.resolve(GLOBAL_CONFIG_JSONC)])
     expect(result.plugins).toHaveLength(1)
     expect(result.plugins[0]).toMatchObject({
       id: "npm:foo",
       source: "npm",
       version: "2.0",
-      fromFile: path.resolve(leafFile),
+      fromFile: path.resolve(GLOBAL_CONFIG_JSONC),
     })
-  })
-
-  test("keeps plugins from different ids across multiple files", async () => {
-    const rootFile = "/repo/plugins.json"
-    const leafFile = "/repo/subdir/plugins.json"
-
-    setExistingFiles([rootFile, leafFile])
-    setConfigFiles({
-      [rootFile]: { plugins: ["foo@1.0"] },
-      [leafFile]: { plugins: [{ source: "git", repo: "https://github.com/example/another.git" }] },
-    })
-
-    const result = await loadMergedConfig(input("/repo", "/repo/subdir"))
-    const ids = result.plugins.map((plugin) => plugin.id)
-
-    expect(ids).toEqual(["npm:foo", "git:https://github.com/example/another"])
-  })
-
-  test("returns empty config when no config files exist", async () => {
-    setExistingFiles([])
-    const result = await loadMergedConfig(input("/repo", "/repo"))
-
-    expect(result.files).toEqual([])
-    expect(result.plugins).toEqual([])
-    expect(result.cacheDir).toBeUndefined()
-    expect(result.cacheDirBase).toBeUndefined()
-    expect(mockReadJsoncFile).not.toHaveBeenCalled()
   })
 
   test("skips invalid config files and continues with valid ones", async () => {
-    const invalidFile = "/repo/plugins.json"
-    const validFile = "/repo/subdir/plugins.json"
-
-    setExistingFiles([invalidFile, validFile])
+    setExistingFiles([GLOBAL_CONFIG_JSON, GLOBAL_CONFIG_JSONC])
     setConfigFiles({
-      [invalidFile]: {
+      [GLOBAL_CONFIG_JSON]: {
         plugins: [{ source: "git", repo: "not-a-url" }],
       },
-      [validFile]: {
+      [GLOBAL_CONFIG_JSONC]: {
         plugins: ["ok@1.0"],
       },
     })
@@ -255,71 +218,33 @@ describe("loadMergedConfig", () => {
       expect(result.plugins).toHaveLength(1)
       expect(result.plugins[0]).toMatchObject({ id: "npm:ok", version: "1.0" })
       expect(warn).toHaveBeenCalledTimes(1)
-      expect(String(warn.mock.calls[0]?.[0])).toContain(`Invalid config at ${path.resolve(invalidFile)}`)
+      expect(String(warn.mock.calls[0]?.[0])).toContain(`Invalid config at ${path.resolve(GLOBAL_CONFIG_JSON)}`)
     } finally {
       console.warn = originalWarn
     }
   })
 
-  test("uses cacheDir from the last parsed file and tracks its base directory", async () => {
-    const rootFile = "/repo/plugins.json"
-    const leafFile = "/repo/subdir/plugins.json"
-
-    setExistingFiles([rootFile, leafFile])
+  test("uses cacheDir from the last parsed global file", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON, GLOBAL_CONFIG_JSONC])
     setConfigFiles({
-      [rootFile]: { cacheDir: "cache/root", plugins: [] },
-      [leafFile]: { cacheDir: "cache/leaf", plugins: [] },
+      [GLOBAL_CONFIG_JSON]: { cacheDir: "cache/root", plugins: [] },
+      [GLOBAL_CONFIG_JSONC]: { cacheDir: "cache/leaf", plugins: [] },
     })
 
     const result = await loadMergedConfig(input("/repo", "/repo/subdir"))
 
     expect(result.cacheDir).toBe("cache/leaf")
-    expect(result.cacheDirBase).toBe(path.dirname(path.resolve(leafFile)))
+    expect(result.cacheDirBase).toBe(path.dirname(path.resolve(GLOBAL_CONFIG_JSONC)))
   })
-})
 
-describe("directoryChain behavior through loadMergedConfig", () => {
-  test("when leaf equals root, only root directory candidates are considered", async () => {
-    const rootFile = "/repo/plugins.json"
-    const parentFile = "/plugins.json"
-
-    setExistingFiles([rootFile, parentFile])
-    setConfigFiles({ [rootFile]: { plugins: [] }, [parentFile]: { plugins: [] } })
-
+  test("returns empty config when no global config files exist", async () => {
+    setExistingFiles([])
     const result = await loadMergedConfig(input("/repo", "/repo"))
 
-    expect(result.files).toEqual([path.resolve(rootFile)])
-  })
-
-  test("builds a root-first chain from worktree to leaf", async () => {
-    const rootFile = "/repo/plugins.json"
-    const middleFile = "/repo/packages/plugins.json"
-    const leafFile = "/repo/packages/app/plugins.json"
-
-    setExistingFiles([rootFile, middleFile, leafFile])
-    setConfigFiles({
-      [rootFile]: { plugins: [] },
-      [middleFile]: { plugins: [] },
-      [leafFile]: { plugins: [] },
-    })
-
-    const result = await loadMergedConfig(input("/repo", "/repo/packages/app"))
-
-    expect(result.files).toEqual([path.resolve(rootFile), path.resolve(middleFile), path.resolve(leafFile)])
-  })
-
-  test("stops at boundary when leaf is outside root", async () => {
-    const outsideLeafFile = "/outside/project/plugins.json"
-    const rootFile = "/repo/plugins.json"
-
-    setExistingFiles([outsideLeafFile, rootFile])
-    setConfigFiles({
-      [outsideLeafFile]: { plugins: [] },
-      [rootFile]: { plugins: [] },
-    })
-
-    const result = await loadMergedConfig(input("/repo", "/outside/project"))
-
-    expect(result.files).toEqual([path.resolve(outsideLeafFile)])
+    expect(result.files).toEqual([])
+    expect(result.plugins).toEqual([])
+    expect(result.cacheDir).toBeUndefined()
+    expect(result.cacheDirBase).toBeUndefined()
+    expect(mockReadJsoncFile).not.toHaveBeenCalled()
   })
 })

@@ -1,14 +1,13 @@
 import { z } from "zod"
 
 export const BUILD_COMMAND_TIMEOUT_MS = 30_000
-export const LOCK_ENTRY_SOURCES = ["npm", "git", "local", "github-release"] as const
+export const LOCK_ENTRY_SOURCES = ["npm", "git", "local"] as const
 export type LockEntrySource = (typeof LOCK_ENTRY_SOURCES)[number]
 
 const LOCK_ENTRY_SOURCE_IS_CACHED = {
   npm: true,
   git: true,
   local: false,
-  "github-release": true,
 } as const satisfies Record<LockEntrySource, boolean>
 
 export type CachedLockEntrySource = {
@@ -46,24 +45,11 @@ const LocalPluginSchema = z.object({
   build: BuildSchema.optional(),
 })
 
-const GITHUB_REPO_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/
-
-const GithubReleasePluginSchema = z.object({
-  source: z.literal("github-release"),
-  repo: z.string().regex(GITHUB_REPO_PATTERN),
-  tag: z.string().min(1).optional(),
-  asset: z.string().min(1).optional(),
-  entry: z.string().min(1).optional(),
-  assetDigest: z.string().min(1).optional(),
-  build: BuildSchema.optional(),
-})
-
 export const PluginInputSchema = z.union([
   z.string().min(1),
   NpmPluginSchema,
   GitPluginSchema,
   LocalPluginSchema,
-  GithubReleasePluginSchema,
 ])
 
 export const PluginsFileSchema = z.object({
@@ -94,16 +80,6 @@ export type NormalizedPluginSpec =
       entry?: string
       build?: z.infer<typeof BuildSchema>
     }
-  | {
-      source: "github-release"
-      repo: string
-      tag?: string
-      asset?: string
-      entry?: string
-      assetDigest?: string
-      build?: z.infer<typeof BuildSchema>
-    }
-
 export type ManagedPluginSpec = NormalizedPluginSpec & {
   id: string
   fromFile: string
@@ -137,18 +113,10 @@ const LocalLockEntrySchema = LockEntryBaseSchema.extend({
   entry: z.string().min(1).optional(),
 })
 
-const GithubReleaseLockEntrySchema = LockEntryBaseSchema.extend({
-  source: z.literal("github-release"),
-  repo: z.string().regex(GITHUB_REPO_PATTERN),
-  tag: z.string().min(1),
-  asset: z.string().min(1).optional(),
-})
-
 export const LockEntrySchema = z.discriminatedUnion("source", [
   NpmLockEntrySchema,
   GitLockEntrySchema,
   LocalLockEntrySchema,
-  GithubReleaseLockEntrySchema,
 ])
 
 export const LockfileSchema = z.object({

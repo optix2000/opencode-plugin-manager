@@ -444,9 +444,6 @@ describe("cleanCacheDirectories", () => {
       if (dirPath === path.join(cacheContext.rootDir, "git")) {
         return [makeDirent("stale-git", true)]
       }
-      if (dirPath === path.join(cacheContext.rootDir, "github-release")) {
-        return []
-      }
       return []
     })
 
@@ -487,10 +484,4 @@ describe("path construction", () => {
     )
   })
 
-  test("githubInstallDir includes tag in sanitized path", () => {
-    const cacheContext = makeCacheContext("/cache")
-    expect(cache.githubInstallDir(cacheContext, "owner/repo", "v1.0.0+meta")).toBe(
-      path.join("/cache", "github-release", "owner_repo-v1.0.0_meta"),
-    )
-  })
 })

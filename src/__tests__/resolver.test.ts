@@ -5,7 +5,6 @@ import { makeCacheContext, makeLockEntry, makeSpec } from "./helpers"
 type NpmSpec = Extract<ManagedPluginSpec, { source: "npm" }>
 type GitSpec = Extract<ManagedPluginSpec, { source: "git" }>
 type LocalSpec = Extract<ManagedPluginSpec, { source: "local" }>
-type GithubReleaseSpec = Extract<ManagedPluginSpec, { source: "github-release" }>
 
 const mockIsTrustedLockEntryPath = mock()
 const mockExists = mock()
@@ -13,7 +12,6 @@ const mockExists = mock()
 const mockSyncNpmPlugin = mock()
 const mockSyncGitPlugin = mock()
 const mockSyncLocalPlugin = mock()
-const mockSyncGithubReleasePlugin = mock()
 
 mock.module("../resolver.deps", () => ({
   isTrustedLockEntryPath: mockIsTrustedLockEntryPath,
@@ -21,7 +19,6 @@ mock.module("../resolver.deps", () => ({
   syncNpmPlugin: mockSyncNpmPlugin,
   syncGitPlugin: mockSyncGitPlugin,
   syncLocalPlugin: mockSyncLocalPlugin,
-  syncGithubReleasePlugin: mockSyncGithubReleasePlugin,
   pluginDisplayName: (spec: { id: string }) => spec.id,
 }))
 
@@ -57,7 +54,6 @@ beforeEach(() => {
     mockSyncNpmPlugin,
     mockSyncGitPlugin,
     mockSyncLocalPlugin,
-    mockSyncGithubReleasePlugin,
   ]) {
     fn.mockReset()
   }
@@ -95,16 +91,6 @@ beforeEach(() => {
     })
   })
 
-  mockSyncGithubReleasePlugin.mockImplementation(async (specArg: unknown) => {
-    const spec = specArg as GithubReleaseSpec
-    return makeLockEntry("github-release", {
-      id: spec.id,
-      repo: spec.repo,
-      tag: spec.tag ?? "v9.9.9",
-      asset: spec.asset,
-      resolvedPath: `/cache/github/${spec.repo}/${spec.asset ?? "plugin.js"}`,
-    })
-  })
 })
 
 describe("syncPlugins flow control", () => {
@@ -128,7 +114,6 @@ describe("syncPlugins flow control", () => {
       expect(mockSyncNpmPlugin).not.toHaveBeenCalled()
       expect(mockSyncGitPlugin).not.toHaveBeenCalled()
       expect(mockSyncLocalPlugin).not.toHaveBeenCalled()
-      expect(mockSyncGithubReleasePlugin).not.toHaveBeenCalled()
     })
 
     test("syncs when lock is compatible but untrusted", async () => {
@@ -430,42 +415,6 @@ describe("isCompatibleLock behavior via syncPlugins", () => {
     expect(mockSyncGitPlugin).toHaveBeenCalledWith(spec, cache, { lockedCommit: undefined })
   })
 
-  test("github-release lock is compatible when spec has no tag", async () => {
-    const spec = makeSpec("github-release", {
-      id: "github-release:no-tag",
-      repo: "owner/no-tag",
-      tag: undefined,
-    })
-    const previous = makeLockEntry("github-release", {
-      id: spec.id,
-      repo: spec.repo,
-      tag: "v1.0.0",
-    })
-
-    const result = await runSyncPlugins([spec], lockfileWith(spec, previous), "install")
-
-    expect(result.reused).toEqual([`${spec.id} (cached)`])
-    expect(mockSyncGithubReleasePlugin).not.toHaveBeenCalled()
-  })
-
-  test("github-release lock is compatible when tags match", async () => {
-    const spec = makeSpec("github-release", {
-      id: "github-release:tag-match",
-      repo: "owner/tag-match",
-      tag: "v2.0.0",
-    })
-    const previous = makeLockEntry("github-release", {
-      id: spec.id,
-      repo: spec.repo,
-      tag: "v2.0.0",
-    })
-
-    const result = await runSyncPlugins([spec], lockfileWith(spec, previous), "install")
-
-    expect(result.reused).toEqual([`${spec.id} (cached)`])
-    expect(mockSyncGithubReleasePlugin).not.toHaveBeenCalled()
-  })
-
   test("local lock is compatible when path and entry match", async () => {
     const spec = makeSpec("local", {
       id: "local:match",
@@ -567,44 +516,14 @@ describe("syncSinglePlugin dispatch via syncPlugins", () => {
     expect(mockSyncLocalPlugin).toHaveBeenCalledWith(spec)
     expect(mockSyncNpmPlugin).not.toHaveBeenCalled()
     expect(mockSyncGitPlugin).not.toHaveBeenCalled()
-    expect(mockSyncGithubReleasePlugin).not.toHaveBeenCalled()
   })
 
-  test("github-release sync receives lockedTag and lockedAsset in install mode", async () => {
-    const spec = makeSpec("github-release", {
-      id: "github-release:dispatch-install",
-      repo: "owner/dispatch-install",
-      tag: "v1.0.0",
-      asset: "plugin.js",
-    })
-    const previous = makeLockEntry("github-release", {
-      id: spec.id,
-      repo: spec.repo,
-      tag: "v1.0.0",
-      asset: "plugin.js",
-    })
-
-    mockIsTrustedLockEntryPath.mockResolvedValue(false)
-    await runSyncPlugins([spec], lockfileWith(spec, previous), "install")
-
-    expect(mockSyncGithubReleasePlugin).toHaveBeenCalledWith(spec, cache, {
-      lockedTag: "v1.0.0",
-      lockedAsset: "plugin.js",
-    })
-  })
-
-  test("update mode never forwards locked values to npm/git/github backends", async () => {
+  test("update mode never forwards locked values to npm/git backends", async () => {
     const npmSpec = makeSpec("npm", { id: "npm:update-no-locked", name: "update-no-locked" })
     const gitSpec = makeSpec("git", {
       id: "git:update-no-locked",
       repo: "https://github.com/test/update-no-locked",
       ref: "main",
-    })
-    const githubSpec = makeSpec("github-release", {
-      id: "github-release:update-no-locked",
-      repo: "owner/update-no-locked",
-      tag: "v5.0.0",
-      asset: "plugin.js",
     })
 
     const currentLock: Lockfile = {
@@ -621,23 +540,13 @@ describe("syncSinglePlugin dispatch via syncPlugins", () => {
           ref: "main",
           commit: "old-commit",
         }),
-        [githubSpec.id]: makeLockEntry("github-release", {
-          id: githubSpec.id,
-          repo: githubSpec.repo,
-          tag: "v5.0.0",
-          asset: "plugin.js",
-        }),
       },
     }
 
-    await runSyncPlugins([npmSpec, gitSpec, githubSpec], currentLock, "update")
+    await runSyncPlugins([npmSpec, gitSpec], currentLock, "update")
 
     expect(mockSyncNpmPlugin).toHaveBeenCalledWith(npmSpec, cache, { lockedVersion: undefined })
     expect(mockSyncGitPlugin).toHaveBeenCalledWith(gitSpec, cache, { lockedCommit: undefined })
-    expect(mockSyncGithubReleasePlugin).toHaveBeenCalledWith(githubSpec, cache, {
-      lockedTag: undefined,
-      lockedAsset: undefined,
-    })
   })
 })
 

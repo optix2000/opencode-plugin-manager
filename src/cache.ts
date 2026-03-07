@@ -131,10 +131,6 @@ export function gitInstallDir(cache: CacheContext, repo: string, commit: string)
   return path.join(sourceDir(cache, "git"), `${sanitizeSegment(repo)}-${sanitizeSegment(commit.slice(0, 12))}`)
 }
 
-export function githubInstallDir(cache: CacheContext, repo: string, tag: string): string {
-  return path.join(sourceDir(cache, "github-release"), `${sanitizeSegment(repo)}-${sanitizeSegment(tag)}`)
-}
-
 export type CleanCacheResult = {
   removedPaths: string[]
 }
@@ -169,7 +165,6 @@ export async function cleanCacheDirectories(cache: CacheContext, lockfile: Lockf
 function installRootForEntry(cache: CacheContext, entry: LockEntry): string | undefined {
   if (entry.source === "npm") return npmInstallDir(cache, entry.name, entry.resolvedVersion)
   if (entry.source === "git") return gitInstallDir(cache, entry.repo, entry.commit)
-  if (entry.source === "github-release") return githubInstallDir(cache, entry.repo, entry.tag)
   return undefined
 }
 

@@ -14,10 +14,6 @@ export function makeLockEntry(
   source: "local",
   overrides?: Partial<Extract<LockEntry, { source: "local" }>>,
 ): Extract<LockEntry, { source: "local" }>
-export function makeLockEntry(
-  source: "github-release",
-  overrides?: Partial<Extract<LockEntry, { source: "github-release" }>>,
-): Extract<LockEntry, { source: "github-release" }>
 export function makeLockEntry(source: string, overrides: Record<string, unknown> = {}): LockEntry {
   const base = {
     id: `${source}:test`,
@@ -49,14 +45,6 @@ export function makeLockEntry(source: string, overrides: Record<string, unknown>
         resolvedPath: "/local/plugin/index.js",
         ...overrides,
       }
-    case "github-release":
-      return {
-        ...base,
-        source: "github-release",
-        repo: "test/plugin",
-        tag: "v1.0.0",
-        ...overrides,
-      }
     default:
       throw new Error(`Unknown source: ${source}`)
   }
@@ -74,10 +62,6 @@ export function makeSpec(
   source: "local",
   overrides?: Partial<Extract<ManagedPluginSpec, { source: "local" }>>,
 ): Extract<ManagedPluginSpec, { source: "local" }>
-export function makeSpec(
-  source: "github-release",
-  overrides?: Partial<Extract<ManagedPluginSpec, { source: "github-release" }>>,
-): Extract<ManagedPluginSpec, { source: "github-release" }>
 export function makeSpec(source: string, overrides: Record<string, unknown> = {}): ManagedPluginSpec {
   const base = {
     fromFile: "/config/plugins.json",
@@ -105,14 +89,6 @@ export function makeSpec(source: string, overrides: Record<string, unknown> = {}
         source: "local",
         id: "local:/local/plugin",
         path: "/local/plugin",
-        ...overrides,
-      }
-    case "github-release":
-      return {
-        ...base,
-        source: "github-release",
-        id: "github-release:test/plugin",
-        repo: "test/plugin",
         ...overrides,
       }
     default:

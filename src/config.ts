@@ -13,7 +13,7 @@ export type MergedConfig = {
 }
 
 export async function loadMergedConfig(input: RuntimePluginInput): Promise<MergedConfig> {
-  const files = await discoverConfigFiles(input)
+  const files = await discoverConfigFiles()
   const merged = new Map<string, ManagedPluginSpec>()
 
   let cacheDir: string | undefined
@@ -47,7 +47,6 @@ export function pluginDisplayName(spec: ManagedPluginSpec): string {
   if (spec.source === "npm") return spec.version ? `${spec.name}@${spec.version}` : spec.name
   if (spec.source === "git") return spec.ref ? `${spec.repo}#${spec.ref}` : spec.repo
   if (spec.source === "local") return spec.path
-  if (spec.source === "github-release") return spec.tag ? `${spec.repo}@${spec.tag}` : spec.repo
   const _exhaustive: never = spec
   throw new Error(`Unhandled plugin source in pluginDisplayName: ${JSON.stringify(_exhaustive)}`)
 }
@@ -102,12 +101,8 @@ function normalizePlugin(plugin: PluginsFile["plugins"][number], fromFile: strin
     }
   }
 
-  return {
-    ...normalized,
-    repo: normalized.repo.toLowerCase(),
-    id: `github-release:${normalized.repo.toLowerCase()}`,
-    fromFile,
-  }
+  const _exhaustive: never = normalized
+  throw new Error(`Unhandled plugin source in normalizePlugin: ${JSON.stringify(_exhaustive)}`)
 }
 
 function isLocalPathShorthand(value: string): boolean {
@@ -136,28 +131,8 @@ async function parseConfigFile(filePath: string): Promise<PluginsFile | null> {
   return parsed.data
 }
 
-async function discoverConfigFiles(input: RuntimePluginInput): Promise<string[]> {
-  const candidates: string[] = []
-
-  for (const file of CONFIG_FILENAMES) {
-    candidates.push(path.join(os.homedir(), ".config", "opencode", file))
-    candidates.push(path.join(os.homedir(), ".config", "opencode", ".opencode", file))
-  }
-
-  const chain = directoryChain(input.worktree, input.directory)
-  for (const dir of chain) {
-    for (const file of CONFIG_FILENAMES) {
-      candidates.push(path.join(dir, ".opencode", file))
-      candidates.push(path.join(dir, file))
-    }
-  }
-
-  const configDir = process.env.OPENCODE_CONFIG_DIR
-  if (configDir) {
-    for (const file of CONFIG_FILENAMES) {
-      candidates.push(path.join(configDir, file))
-    }
-  }
+async function discoverConfigFiles(): Promise<string[]> {
+  const candidates = CONFIG_FILENAMES.map((file) => path.join(os.homedir(), ".config", "opencode", file))
 
   const deduped: string[] = []
   const seen = new Set<string>()
@@ -168,26 +143,6 @@ async function discoverConfigFiles(input: RuntimePluginInput): Promise<string[]>
     if (await exists(normalized)) deduped.push(normalized)
   }
   return deduped
-}
-
-function directoryChain(root: string, leaf: string): string[] {
-  const rootResolved = path.resolve(root)
-  let current = path.resolve(leaf)
-
-  const result = new Set<string>()
-  while (true) {
-    result.add(current)
-    if (current === rootResolved) break
-    const parent = path.dirname(current)
-    if (parent === current) break
-    const relative = path.relative(rootResolved, parent)
-    if (relative.startsWith("..") || path.isAbsolute(relative)) break
-    current = parent
-  }
-
-  const ordered = [...result]
-  ordered.reverse()
-  return ordered
 }
 
 export async function writeJsonFile(filePath: string, value: unknown): Promise<void> {

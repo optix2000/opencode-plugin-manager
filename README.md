@@ -1,6 +1,6 @@
 # opencode-plugin-manager
 
-`opencode-plugin-manager` is an opencode meta-plugin that manages plugin sources from npm, git repositories, local paths, and GitHub releases.
+`opencode-plugin-manager` is an opencode meta-plugin that manages plugin sources from npm, git repositories, and local paths.
 
 It does not auto-download on startup. You explicitly run `opm.sync` to install/update plugins, and startup loads from locked plugin paths.
 
@@ -16,7 +16,7 @@ Add the plugin manager to your opencode config:
 
 ## Configure plugins
 
-Create `plugins.json` (or `plugins.jsonc`) in `.opencode/` or your global opencode config directory:
+Create `plugins.json` (or `plugins.jsonc`) in your global opencode config directory (`~/.config/opencode`):
 
 ```jsonc
 {
@@ -38,19 +38,10 @@ Create `plugins.json` (or `plugins.jsonc`) in `.opencode/` or your global openco
       "build": {
         "command": "npm run build"
       }
-    },
-    {
-      "source": "github-release",
-      "repo": "acme/opencode-release-plugin",
-      "tag": "v0.4.0",
-      "asset": "plugin.js",
-      "assetDigest": "sha256:optionaldigest"
     }
   ]
 }
 ```
-
-`assetDigest` is optional. Provide it when you want strict digest verification for GitHub release assets.
 
 ## Install and update flow
 
@@ -102,6 +93,7 @@ This repo also includes starter templates in `commands/` that you can copy into 
 ## Behavior
 
 - Startup loads plugins from locked paths (cached installs and local paths).
+- Only global config is loaded from `~/.config/opencode/plugins.json` or `~/.config/opencode/plugins.jsonc`.
 - Failed plugin sync/load logs a warning and continues.
 - Build commands are never auto-run; they only run when explicitly set with `build.command`.
 - If `entry` is configured, it takes precedence. Otherwise, `opencode.plugin.ts` is used automatically when present.
