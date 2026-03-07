@@ -4,7 +4,7 @@ import type { CacheContext } from "../cache"
 import { npmInstallDir } from "../cache"
 import type { LockEntry, ManagedPluginSpec } from "../types"
 import { ensureDir, exists, runCommand } from "../util"
-import { resolvePluginEntry } from "./shared"
+import { moveExtractedDirIntoPlace, resolvePluginEntry } from "./shared"
 
 type NpmSpec = Extract<ManagedPluginSpec, { source: "npm" }>
 
@@ -47,9 +47,14 @@ export async function syncNpmPlugin(
     const targetDir = npmInstallDir(cache, spec.name, resolvedVersion)
     await ensureDir(path.dirname(targetDir))
 
-    if (!(await exists(targetDir))) {
-      await fs.rename(tempDir, targetDir)
-    }
+    await moveExtractedDirIntoPlace({
+      targetDir,
+      extractedDir: tempDir,
+      validateExistingDir: async (installDir) => {
+        const packageDir = path.join(installDir, "node_modules", spec.name)
+        await resolvePluginEntry(packageDir, spec.entry)
+      },
+    })
 
     const packageDir = path.join(targetDir, "node_modules", spec.name)
     const resolvedPath = await resolvePluginEntry(packageDir, spec.entry)

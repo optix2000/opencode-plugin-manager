@@ -50,6 +50,61 @@ export async function resolvePluginEntry(rootDir: string, explicitEntry?: string
   throw new Error(`Could not determine plugin entrypoint for ${rootDir}`)
 }
 
+export async function moveExtractedDirIntoPlace(input: {
+  targetDir: string
+  extractedDir: string
+  validateExistingDir: (targetDir: string) => Promise<void>
+}): Promise<void> {
+  const { targetDir, extractedDir, validateExistingDir } = input
+
+  try {
+    await fs.rename(extractedDir, targetDir)
+    return
+  } catch (error) {
+    if (!isExistingDirectoryError(error)) {
+      throw error
+    }
+  }
+
+  if (await isValidExistingDir(targetDir, validateExistingDir)) {
+    return
+  }
+
+  await fs.rm(targetDir, { recursive: true, force: true })
+
+  try {
+    await fs.rename(extractedDir, targetDir)
+  } catch (error) {
+    if (!isExistingDirectoryError(error)) {
+      throw error
+    }
+
+    if (await isValidExistingDir(targetDir, validateExistingDir)) {
+      return
+    }
+
+    throw new Error(`Install directory exists but remains invalid: ${targetDir}`)
+  }
+}
+
+async function isValidExistingDir(
+  targetDir: string,
+  validateExistingDir: (targetDir: string) => Promise<void>,
+): Promise<boolean> {
+  try {
+    await validateExistingDir(targetDir)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function isExistingDirectoryError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const code = (error as NodeJS.ErrnoException).code
+  return code === "EEXIST" || code === "ENOTEMPTY"
+}
+
 function resolveExports(value: unknown): string | undefined {
   if (typeof value === "string") return value
   if (!value || typeof value !== "object") return undefined

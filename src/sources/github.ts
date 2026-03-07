@@ -5,7 +5,7 @@ import type { CacheContext } from "../cache"
 import { githubInstallDir } from "../cache"
 import type { LockEntry, ManagedPluginSpec } from "../types"
 import { ensureDir, exists, runCommand, sha256File } from "../util"
-import { resolvePluginEntry } from "./shared"
+import { moveExtractedDirIntoPlace, resolvePluginEntry } from "./shared"
 
 type GithubSpec = Extract<ManagedPluginSpec, { source: "github-release" }>
 
@@ -67,9 +67,14 @@ export async function syncGithubReleasePlugin(
 
     const targetDir = githubInstallDir(cache, spec.repo, tag)
     await ensureDir(path.dirname(targetDir))
-    if (!(await exists(targetDir))) {
-      await fs.rename(extractedDir, targetDir)
-    }
+
+    await moveExtractedDirIntoPlace({
+      targetDir,
+      extractedDir,
+      validateExistingDir: async (installDir) => {
+        await resolvePluginEntry(installDir, spec.entry ?? maybeDirectFileEntry(asset.name, installDir))
+      },
+    })
 
     const resolvedPath = await resolvePluginEntry(targetDir, spec.entry ?? maybeDirectFileEntry(asset.name, targetDir))
 

@@ -4,7 +4,7 @@ import type { CacheContext } from "../cache"
 import { gitInstallDir } from "../cache"
 import type { LockEntry, ManagedPluginSpec } from "../types"
 import { ensureDir, exists, runCommand } from "../util"
-import { resolvePluginEntry } from "./shared"
+import { moveExtractedDirIntoPlace, resolvePluginEntry } from "./shared"
 
 type GitSpec = Extract<ManagedPluginSpec, { source: "git" }>
 
@@ -51,9 +51,13 @@ export async function syncGitPlugin(
     const targetDir = gitInstallDir(cache, spec.repo, commit)
     await ensureDir(path.dirname(targetDir))
 
-    if (!(await exists(targetDir))) {
-      await fs.rename(cloneDir, targetDir)
-    }
+    await moveExtractedDirIntoPlace({
+      targetDir,
+      extractedDir: cloneDir,
+      validateExistingDir: async (installDir) => {
+        await resolvePluginEntry(installDir, spec.entry)
+      },
+    })
 
     const resolvedPath = await resolvePluginEntry(targetDir, spec.entry)
     return {
