@@ -245,6 +245,10 @@ describe("opm_install", () => {
       expect.objectContaining({ cwd: "/workspace" }),
       cache,
       expect.anything(),
+      expect.objectContaining({
+        cacheBustLocal: true,
+        cacheBustToken: expect.any(String),
+      }),
     )
     expect(hasLogged("warn", "[plugin-manager] warning")).toBe(true)
 
@@ -373,7 +377,16 @@ describe("opm_clean and pruneLockfile behavior", () => {
       cache,
       expect.anything(),
     )
-    expect(mockLoadManagedPlugins).toHaveBeenLastCalledWith([keepEntry], expect.objectContaining({}), cache, expect.anything())
+    expect(mockLoadManagedPlugins).toHaveBeenLastCalledWith(
+      [keepEntry],
+      expect.objectContaining({}),
+      cache,
+      expect.anything(),
+      expect.objectContaining({
+        cacheBustLocal: true,
+        cacheBustToken: expect.any(String),
+      }),
+    )
 
     expect(output).toContain("Removed 2 cached plugin directory(s).")
     expect(output).toContain(`Pruned lock entries: ${staleEntry.id}, ${missingEntry.id}`)

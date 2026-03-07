@@ -11,6 +11,11 @@ type LoadedPlugin = {
   hooks: Hooks
 }
 
+export type LoadManagedPluginsOptions = {
+  cacheBustLocal?: boolean
+  cacheBustToken?: string
+}
+
 const TWO_ARG_HOOKS: (keyof Hooks)[] = [
   "chat.message",
   "chat.params",
@@ -32,6 +37,7 @@ export async function loadManagedPlugins(
   input: PluginInput,
   cache: CacheContext,
   logger: Logger = createConsoleLogger(),
+  options: LoadManagedPluginsOptions = {},
 ): Promise<LoadedPlugin[]> {
   const loaded: LoadedPlugin[] = []
 
@@ -44,7 +50,7 @@ export async function loadManagedPlugins(
         })
         continue
       }
-      const moduleUrl = pathToFileURL(entry.resolvedPath).href
+      const moduleUrl = moduleUrlForEntry(entry, options)
       logger.debug("Loading managed plugin module", {
         pluginID: entry.id,
         moduleUrl,
@@ -82,6 +88,15 @@ export async function loadManagedPlugins(
   }
 
   return loaded
+}
+
+function moduleUrlForEntry(entry: LockEntry, options: LoadManagedPluginsOptions): string {
+  const baseUrl = pathToFileURL(entry.resolvedPath).href
+  if (!options.cacheBustLocal || entry.source !== "local") return baseUrl
+
+  const token = options.cacheBustToken ?? String(Date.now())
+  const separator = baseUrl.includes("?") ? "&" : "?"
+  return `${baseUrl}${separator}opm_reload=${encodeURIComponent(token)}`
 }
 
 export type MergedManagedHooks = {

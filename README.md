@@ -103,8 +103,15 @@ This repo also includes starter templates in `commands/` that you can copy into 
 ## Behavior
 
 - Startup loads plugins from locked paths (cached installs and local paths).
+- Managed plugin reloads only happen on startup or when `opm_install`, `opm_update`, `opm_clean`, or `opm_sync` are run.
 - Only global config is loaded from `~/.config/opencode/plugins.json` or `~/.config/opencode/plugins.jsonc`.
 - Failed plugin sync/load logs a warning and continues.
 - Build commands are never auto-run; they only run when explicitly set with `build.command`.
 - If `entry` is configured, it takes precedence. Otherwise, `opencode.plugin.ts` is used automatically when present.
 - Tool/auth collisions are last-write-wins with warnings.
+
+## Reload limitations
+
+- Reloading only happens on startup or when `opm_install`, `opm_update`, `opm_clean`, or `opm_sync` run.
+- Managed hook code reloads on those tool-triggered refreshes, but opencode caches some state per instance.
+- Changes to tool registration or auth-provider behavior may require restarting opencode before they fully take effect.

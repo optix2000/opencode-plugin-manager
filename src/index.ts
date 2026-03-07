@@ -34,12 +34,13 @@ export const PluginManager: Plugin = async (input) => {
     worktree: input.worktree,
   })
 
+  let reloadNonce = 0
   let mergedConfig = await loadMergedConfig(input, logger)
   let cache = resolveCacheContext(mergedConfig)
 
   const initialLockfile = await readLockfile(cache.lockfilePath, logger)
   const initialEntries = await resolveCachedPluginPaths(mergedConfig.plugins, initialLockfile, cache, logger)
-  let loaded = await loadManagedPlugins(initialEntries, input, cache, logger)
+  let loaded = await loadManagedPlugins(initialEntries, input, cache, logger, nextReloadOptions("startup"))
 
   const managed = mergeManagedHooks(() => loaded, logger)
 
@@ -170,7 +171,7 @@ export const PluginManager: Plugin = async (input) => {
     }
 
     const refreshedEntries = await resolveCachedPluginPaths(mergedConfig.plugins, result.lockfile, cache, logger)
-    loaded = await loadManagedPlugins(refreshedEntries, input, cache, logger)
+    loaded = await loadManagedPlugins(refreshedEntries, input, cache, logger, nextReloadOptions(`tool:${mode}`))
 
     const lines: string[] = []
     const verb = mode === "install" ? "Installed" : "Updated"
@@ -221,7 +222,7 @@ export const PluginManager: Plugin = async (input) => {
     }, undefined, logger)
 
     const refreshedEntries = await resolveCachedPluginPaths(mergedConfig.plugins, result.lockfile, cache, logger)
-    loaded = await loadManagedPlugins(refreshedEntries, input, cache, logger)
+    loaded = await loadManagedPlugins(refreshedEntries, input, cache, logger, nextReloadOptions("tool:clean"))
 
     const lines: string[] = []
     lines.push(`Removed ${result.removedPaths.length} cached plugin directory(s).`)
@@ -246,6 +247,14 @@ export const PluginManager: Plugin = async (input) => {
       tool: TOOL_IDS.sync,
     })
     return [installOutput, "", cleanOutput].join("\n")
+  }
+
+  function nextReloadOptions(reason: string) {
+    reloadNonce += 1
+    return {
+      cacheBustLocal: true,
+      cacheBustToken: `${Date.now()}-${reloadNonce}-${reason}`,
+    }
   }
 }
 
