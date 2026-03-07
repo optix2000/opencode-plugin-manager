@@ -1,5 +1,6 @@
 import fs from "node:fs/promises"
 import path from "node:path"
+import { z } from "zod"
 import type { CacheContext } from "../cache"
 import { githubInstallDir } from "../cache"
 import type { LockEntry, ManagedPluginSpec } from "../types"
@@ -8,13 +9,17 @@ import { resolvePluginEntry } from "./shared"
 
 type GithubSpec = Extract<ManagedPluginSpec, { source: "github-release" }>
 
-type GithubRelease = {
-  tag_name: string
-  assets: {
-    name: string
-    browser_download_url: string
-  }[]
-}
+const GithubReleaseSchema = z.object({
+  tag_name: z.string().min(1),
+  assets: z.array(
+    z.object({
+      name: z.string().min(1),
+      browser_download_url: z.string().url(),
+    }),
+  ),
+})
+
+type GithubRelease = z.infer<typeof GithubReleaseSchema>
 
 export async function syncGithubReleasePlugin(
   spec: GithubSpec,
@@ -122,7 +127,13 @@ async function fetchRelease(spec: GithubSpec, lockedTag?: string): Promise<Githu
     throw new Error(`GitHub release lookup failed (${response.status}): ${await response.text()}`)
   }
 
-  return (await response.json()) as GithubRelease
+  const raw = (await response.json()) as unknown
+  const parsed = GithubReleaseSchema.safeParse(raw)
+  if (!parsed.success) {
+    throw new Error(`GitHub release lookup returned invalid response payload: ${parsed.error.message}`)
+  }
+
+  return parsed.data
 }
 
 function githubHeaders(): HeadersInit {
