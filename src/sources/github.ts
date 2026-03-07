@@ -97,7 +97,14 @@ export async function syncGithubReleasePlugin(
 
 function maybeDirectFileEntry(assetName: string): string | undefined {
   const lower = assetName.toLowerCase()
-  if (lower.endsWith(".zip") || lower.endsWith(".tar") || lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) {
+  if (
+    lower.endsWith(".zip") ||
+    lower.endsWith(".tar") ||
+    lower.endsWith(".tar.gz") ||
+    lower.endsWith(".tgz") ||
+    lower.endsWith(".tar.xz") ||
+    lower.endsWith(".txz")
+  ) {
     return undefined
   }
   return assetName
@@ -171,6 +178,11 @@ async function materializeAsset(downloadPath: string, outputDir: string): Promis
     await runCommand({ command: "tar", args: ["-xzf", downloadPath, "-C", outputDir] })
     return
   }
+  if (lower.endsWith(".tar.xz") || lower.endsWith(".txz")) {
+    await assertArchiveEntriesSafe(downloadPath, "tar.xz")
+    await runCommand({ command: "tar", args: ["-xJf", downloadPath, "-C", outputDir] })
+    return
+  }
   if (lower.endsWith(".tar")) {
     await assertArchiveEntriesSafe(downloadPath, "tar")
     await runCommand({ command: "tar", args: ["-xf", downloadPath, "-C", outputDir] })
@@ -181,10 +193,16 @@ async function materializeAsset(downloadPath: string, outputDir: string): Promis
   await fs.copyFile(downloadPath, target)
 }
 
-async function assertArchiveEntriesSafe(downloadPath: string, format: "zip" | "tar.gz" | "tar"): Promise<void> {
+async function assertArchiveEntriesSafe(downloadPath: string, format: "zip" | "tar.gz" | "tar.xz" | "tar"): Promise<void> {
   const command = format === "zip" ? "unzip" : "tar"
   const args =
-    format === "zip" ? ["-Z1", downloadPath] : format === "tar.gz" ? ["-tzf", downloadPath] : ["-tf", downloadPath]
+    format === "zip"
+      ? ["-Z1", downloadPath]
+      : format === "tar.gz"
+        ? ["-tzf", downloadPath]
+        : format === "tar.xz"
+          ? ["-tJf", downloadPath]
+          : ["-tf", downloadPath]
 
   const { stdout } = await runCommand({ command, args })
   for (const rawEntry of stdout.split(/\r?\n/)) {
