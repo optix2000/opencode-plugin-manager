@@ -25,18 +25,18 @@ export async function syncGitPlugin(
     if (options.lockedCommit) {
       await runCommand({
         command: "git",
-        args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "checkout", options.lockedCommit],
+        args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "checkout", "--end-of-options", options.lockedCommit],
       })
     } else if (spec.ref) {
       await runCommand({
         command: "git",
-        args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "checkout", spec.ref],
+        args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "checkout", "--end-of-options", spec.ref],
       })
     }
 
     const commit = (await runCommand({
       command: "git",
-      args: ["-C", cloneDir, "rev-parse", "HEAD"],
+      args: ["-C", cloneDir, "rev-parse", "--end-of-options", "HEAD"],
     })).stdout.trim()
 
     if (spec.build) {
