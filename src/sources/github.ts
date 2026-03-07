@@ -144,18 +144,46 @@ function githubHeaders(): HeadersInit {
 async function materializeAsset(downloadPath: string, outputDir: string): Promise<void> {
   const lower = downloadPath.toLowerCase()
   if (lower.endsWith(".zip")) {
+    await assertArchiveEntriesSafe(downloadPath, "zip")
     await runCommand({ command: "unzip", args: ["-q", downloadPath, "-d", outputDir] })
     return
   }
   if (lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) {
+    await assertArchiveEntriesSafe(downloadPath, "tar.gz")
     await runCommand({ command: "tar", args: ["-xzf", downloadPath, "-C", outputDir] })
     return
   }
   if (lower.endsWith(".tar")) {
+    await assertArchiveEntriesSafe(downloadPath, "tar")
     await runCommand({ command: "tar", args: ["-xf", downloadPath, "-C", outputDir] })
     return
   }
 
   const target = path.join(outputDir, path.basename(downloadPath))
   await fs.copyFile(downloadPath, target)
+}
+
+async function assertArchiveEntriesSafe(downloadPath: string, format: "zip" | "tar.gz" | "tar"): Promise<void> {
+  const command = format === "zip" ? "unzip" : "tar"
+  const args =
+    format === "zip" ? ["-Z1", downloadPath] : format === "tar.gz" ? ["-tzf", downloadPath] : ["-tf", downloadPath]
+
+  const { stdout } = await runCommand({ command, args })
+  for (const rawEntry of stdout.split(/\r?\n/)) {
+    const entry = rawEntry.trim()
+    if (!entry) continue
+    if (isUnsafeArchiveEntry(entry)) {
+      throw new Error(`Refusing to extract unsafe archive entry: ${entry}`)
+    }
+  }
+}
+
+function isUnsafeArchiveEntry(entry: string): boolean {
+  if (entry.includes("\0")) return true
+
+  const normalized = path.posix.normalize(entry.replace(/\\/g, "/"))
+  if (normalized === ".." || normalized.startsWith("../")) return true
+  if (path.posix.isAbsolute(normalized)) return true
+  if (/^[a-zA-Z]:\//.test(normalized)) return true
+  return false
 }
