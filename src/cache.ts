@@ -83,15 +83,36 @@ export async function withCacheLock<T>(
   }
 }
 
-export async function listResolvedEntries(lockfile: Lockfile): Promise<LockEntry[]> {
+export async function listResolvedEntries(cache: CacheContext, lockfile: Lockfile): Promise<LockEntry[]> {
   const entries = Object.values(lockfile.plugins)
   const existing: LockEntry[] = []
   for (const entry of entries) {
-    if (await exists(entry.resolvedPath)) {
+    if (await isTrustedLockEntryPath(cache, entry)) {
       existing.push(entry)
     }
   }
   return existing
+}
+
+export async function isTrustedLockEntryPath(cache: CacheContext, entry: LockEntry): Promise<boolean> {
+  if (!(await exists(entry.resolvedPath))) return false
+
+  const resolvedPath = await canonicalPath(entry.resolvedPath)
+
+  if (entry.source === "local") {
+    const localRoot = await canonicalPath(entry.path)
+    const localStat = await fs.stat(localRoot).catch(() => undefined)
+    if (!localStat) return false
+    if (localStat.isFile()) return resolvedPath === localRoot
+    if (!localStat.isDirectory()) return false
+    return isPathInside(localRoot, resolvedPath)
+  }
+
+  const installRoot = installRootForEntry(cache, entry)
+  if (!installRoot) return false
+
+  const trustedRoot = await canonicalPath(installRoot)
+  return isPathInside(trustedRoot, resolvedPath)
 }
 
 export function sourceDir(cache: CacheContext, source: LockEntry["source"]): string {
@@ -146,4 +167,14 @@ function installRootForEntry(cache: CacheContext, entry: LockEntry): string | un
   if (entry.source === "git") return gitInstallDir(cache, entry.repo, entry.commit)
   if (entry.source === "github-release") return githubInstallDir(cache, entry.repo, entry.tag)
   return undefined
+}
+
+async function canonicalPath(targetPath: string): Promise<string> {
+  const resolved = path.resolve(targetPath)
+  return (await fs.realpath(resolved).catch(() => undefined)) ?? resolved
+}
+
+function isPathInside(rootDir: string, candidatePath: string): boolean {
+  const relative = path.relative(rootDir, candidatePath)
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
 }

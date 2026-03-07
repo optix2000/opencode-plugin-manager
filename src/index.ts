@@ -12,8 +12,8 @@ export const PluginManager: Plugin = async (input) => {
   let cache = resolveCacheContext(mergedConfig)
 
   const initialLockfile = await readLockfile(cache.lockfilePath)
-  const initialEntries = await resolveCachedPluginPaths(mergedConfig.plugins, initialLockfile)
-  let loaded = await loadManagedPlugins(initialEntries, input)
+  const initialEntries = await resolveCachedPluginPaths(mergedConfig.plugins, initialLockfile, cache)
+  let loaded = await loadManagedPlugins(initialEntries, input, cache)
 
   const mergedHooks = mergeManagedHooks(() => loaded)
 
@@ -118,8 +118,8 @@ export const PluginManager: Plugin = async (input) => {
       console.warn(warning)
     }
 
-    const refreshedEntries = await resolveCachedPluginPaths(mergedConfig.plugins, result.lockfile)
-    loaded = await loadManagedPlugins(refreshedEntries, input)
+    const refreshedEntries = await resolveCachedPluginPaths(mergedConfig.plugins, result.lockfile, cache)
+    loaded = await loadManagedPlugins(refreshedEntries, input, cache)
 
     const lines: string[] = []
     const verb = mode === "install" ? "Installed" : "Updated"
@@ -151,8 +151,8 @@ export const PluginManager: Plugin = async (input) => {
       }
     })
 
-    const refreshedEntries = await resolveCachedPluginPaths(mergedConfig.plugins, result.lockfile)
-    loaded = await loadManagedPlugins(refreshedEntries, input)
+    const refreshedEntries = await resolveCachedPluginPaths(mergedConfig.plugins, result.lockfile, cache)
+    loaded = await loadManagedPlugins(refreshedEntries, input, cache)
 
     const lines: string[] = []
     lines.push(`Removed ${result.removedPaths.length} cached plugin directory(s).`)

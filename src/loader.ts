@@ -1,6 +1,7 @@
 import type { Hooks, Plugin as PluginFactory, PluginInput } from "@opencode-ai/plugin"
 import { pathToFileURL } from "node:url"
 import type { LockEntry } from "./types"
+import { isTrustedLockEntryPath, type CacheContext } from "./cache"
 
 type LoadedPlugin = {
   id: string
@@ -23,11 +24,19 @@ const TWO_ARG_HOOKS: (keyof Hooks)[] = [
   "tool.definition",
 ]
 
-export async function loadManagedPlugins(entries: LockEntry[], input: PluginInput): Promise<LoadedPlugin[]> {
+export async function loadManagedPlugins(
+  entries: LockEntry[],
+  input: PluginInput,
+  cache: CacheContext,
+): Promise<LoadedPlugin[]> {
   const loaded: LoadedPlugin[] = []
 
   for (const entry of entries) {
     try {
+      if (!(await isTrustedLockEntryPath(cache, entry))) {
+        console.warn(`[plugin-manager] Skipping untrusted plugin path for ${entry.id}: ${entry.resolvedPath}`)
+        continue
+      }
       const moduleUrl = pathToFileURL(entry.resolvedPath).href
       const mod = (await import(moduleUrl)) as Record<string, unknown>
       const seen = new Set<PluginFactory>()

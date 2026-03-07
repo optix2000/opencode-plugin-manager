@@ -1,4 +1,4 @@
-import type { CacheContext } from "./cache"
+import { isTrustedLockEntryPath, type CacheContext } from "./cache"
 import type { LockEntry, Lockfile, ManagedPluginSpec } from "./types"
 import { exists } from "./util"
 import { syncGitPlugin } from "./sources/git"
@@ -33,9 +33,11 @@ export async function syncPlugins(input: {
   for (const spec of specs) {
     const previous = currentLock.plugins[spec.id]
     const compatibleLock = previous && isCompatibleLock(spec, previous) ? previous : undefined
+    const trustedCompatibleLock =
+      compatibleLock && (await isTrustedLockEntryPath(cache, compatibleLock)) ? compatibleLock : undefined
 
-    if (mode === "install" && compatibleLock && (await exists(compatibleLock.resolvedPath))) {
-      nextPlugins[spec.id] = previous
+    if (mode === "install" && trustedCompatibleLock) {
+      nextPlugins[spec.id] = trustedCompatibleLock
       reused.push(`${pluginDisplayName(spec)} (cached)`)
       continue
     }
@@ -46,7 +48,7 @@ export async function syncPlugins(input: {
       updated.push(`${pluginDisplayName(spec)} (${mode})`)
     } catch (error) {
       warnings.push(`[plugin-manager] Failed to sync ${pluginDisplayName(spec)}: ${String(error)}`)
-      if (previous && (await exists(previous.resolvedPath))) {
+      if (previous && isCompatibleLock(spec, previous) && (await isTrustedLockEntryPath(cache, previous))) {
         nextPlugins[spec.id] = previous
         reused.push(`${pluginDisplayName(spec)} (fallback cache)`)
       }
@@ -64,14 +66,26 @@ export async function syncPlugins(input: {
   }
 }
 
-export async function resolveCachedPluginPaths(specs: ManagedPluginSpec[], lockfile: Lockfile): Promise<LockEntry[]> {
+export async function resolveCachedPluginPaths(
+  specs: ManagedPluginSpec[],
+  lockfile: Lockfile,
+  cache: CacheContext,
+): Promise<LockEntry[]> {
   const entries: LockEntry[] = []
 
   for (const spec of specs) {
     const cached = lockfile.plugins[spec.id]
     if (!cached) continue
+    if (!isCompatibleLock(spec, cached)) {
+      console.warn(`[plugin-manager] Ignoring incompatible lock entry for ${pluginDisplayName(spec)}`)
+      continue
+    }
     if (!(await exists(cached.resolvedPath))) {
       console.warn(`[plugin-manager] Cached plugin missing on disk: ${pluginDisplayName(spec)}`)
+      continue
+    }
+    if (!(await isTrustedLockEntryPath(cache, cached))) {
+      console.warn(`[plugin-manager] Ignoring untrusted lock path for ${pluginDisplayName(spec)}: ${cached.resolvedPath}`)
       continue
     }
     entries.push(cached)
