@@ -4,6 +4,7 @@ import { loadMergedConfig } from "./config"
 import { loadManagedPlugins, mergeManagedHooks } from "./loader"
 import { resolveCachedPluginPaths, syncPlugins, type SyncMode } from "./resolver"
 import fs from "node:fs/promises"
+import semver from "semver"
 import type { Lockfile } from "./types"
 import { exists } from "./util"
 
@@ -53,7 +54,7 @@ export const PluginManager: Plugin = async (input) => {
         return "Unable to determine current or latest opencode-plugin-manager version."
       }
 
-      if (!isSemverGreater(latestVersion, currentVersion)) {
+      if (!semver.gt(latestVersion, currentVersion)) {
         return `opencode-plugin-manager is up to date (${currentVersion}).`
       }
 
@@ -193,28 +194,6 @@ async function getLatestRegistryVersion(): Promise<string | undefined> {
     return payload.version
   } catch {
     return undefined
-  }
-}
-
-function isSemverGreater(nextVersion: string, currentVersion: string): boolean {
-  const next = parseSemver(nextVersion)
-  const current = parseSemver(currentVersion)
-  if (!next || !current) return nextVersion !== currentVersion
-
-  if (next.major !== current.major) return next.major > current.major
-  if (next.minor !== current.minor) return next.minor > current.minor
-  if (next.patch !== current.patch) return next.patch > current.patch
-
-  return false
-}
-
-function parseSemver(value: string): { major: number; minor: number; patch: number } | undefined {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(value.trim())
-  if (!match) return undefined
-  return {
-    major: Number(match[1]),
-    minor: Number(match[2]),
-    patch: Number(match[3]),
   }
 }
 
