@@ -1,6 +1,23 @@
 import { z } from "zod"
 
 export const BUILD_COMMAND_TIMEOUT_MS = 30_000
+export const LOCK_ENTRY_SOURCES = ["npm", "git", "local", "github-release"] as const
+export type LockEntrySource = (typeof LOCK_ENTRY_SOURCES)[number]
+
+const LOCK_ENTRY_SOURCE_IS_CACHED = {
+  npm: true,
+  git: true,
+  local: false,
+  "github-release": true,
+} as const satisfies Record<LockEntrySource, boolean>
+
+export type CachedLockEntrySource = {
+  [Source in LockEntrySource]: (typeof LOCK_ENTRY_SOURCE_IS_CACHED)[Source] extends true ? Source : never
+}[LockEntrySource]
+
+export const CACHEABLE_LOCK_ENTRY_SOURCES = LOCK_ENTRY_SOURCES.filter(
+  (source): source is CachedLockEntrySource => LOCK_ENTRY_SOURCE_IS_CACHED[source],
+)
 
 export const BuildSchema = z.object({
   command: z.string().min(1),
@@ -94,7 +111,7 @@ export type ManagedPluginSpec = NormalizedPluginSpec & {
 
 const LockEntryBaseSchema = z.object({
   id: z.string().min(1),
-  source: z.enum(["npm", "git", "local", "github-release"]),
+  source: z.enum(LOCK_ENTRY_SOURCES),
   resolvedPath: z.string().min(1),
   updatedAt: z.string().datetime(),
   integrity: z.string().min(1).optional(),

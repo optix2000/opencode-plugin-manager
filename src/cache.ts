@@ -2,7 +2,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import type { MergedConfig } from "./config"
-import { LockfileSchema, type LockEntry, type Lockfile } from "./types"
+import { CACHEABLE_LOCK_ENTRY_SOURCES, LockfileSchema, type LockEntry, type Lockfile } from "./types"
 import { ensureDir, exists, expandHome, sanitizeSegment, sleep } from "./util"
 
 const LOCKFILE_NAME = "plugins.lock.json"
@@ -149,7 +149,7 @@ export async function cleanCacheDirectories(cache: CacheContext, lockfile: Lockf
   }
 
   const removedPaths: string[] = []
-  for (const source of ["npm", "git", "github-release"] as const) {
+  for (const source of CACHEABLE_LOCK_ENTRY_SOURCES) {
     const root = sourceDir(cache, source)
     if (!(await exists(root))) continue
 
