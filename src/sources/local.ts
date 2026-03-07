@@ -1,11 +1,19 @@
 import path from "node:path"
+import { createConsoleLogger, type Logger } from "../log"
 import type { LockEntry, ManagedPluginSpec } from "../types"
 import { fs, resolvePluginEntry, runCommand } from "./local.deps"
 
 type LocalSpec = Extract<ManagedPluginSpec, { source: "local" }>
 
-export async function syncLocalPlugin(spec: LocalSpec): Promise<LockEntry> {
+export async function syncLocalPlugin(spec: LocalSpec, logger?: Logger): Promise<LockEntry> {
+  const activeLogger = logger ?? createConsoleLogger()
   const pluginPath = path.resolve(spec.path)
+  activeLogger.info("Syncing local plugin", {
+    pluginID: spec.id,
+    pluginPath,
+    hasBuild: Boolean(spec.build),
+  })
+
   const stat = await fs.stat(pluginPath).catch(() => undefined)
   if (!stat) {
     throw new Error(`Local plugin path does not exist: ${pluginPath}`)
@@ -22,6 +30,7 @@ export async function syncLocalPlugin(spec: LocalSpec): Promise<LockEntry> {
       args: ["-lc", spec.build.command],
       cwd: buildCwd,
       timeout: spec.build.timeout,
+      ...(logger ? { logger } : {}),
     })
   }
 
@@ -30,6 +39,11 @@ export async function syncLocalPlugin(spec: LocalSpec): Promise<LockEntry> {
   }
 
   const resolvedPath = stat.isDirectory() ? await resolvePluginEntry(pluginPath, spec.entry) : pluginPath
+
+  activeLogger.info("Local plugin synced", {
+    pluginID: spec.id,
+    resolvedPath,
+  })
 
   return {
     id: spec.id,

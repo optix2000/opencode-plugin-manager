@@ -1,8 +1,10 @@
 import type { Hooks, Plugin as PluginFactory, PluginInput } from "@opencode-ai/plugin"
 import { pathToFileURL } from "node:url"
 import type { CacheContext } from "./cache"
+import { createConsoleLogger, type Logger } from "./log"
 import { isTrustedLockEntryPath } from "./loader.deps"
 import type { LockEntry } from "./types"
+import { sanitizeToolName } from "./util"
 
 type LoadedPlugin = {
   id: string
@@ -29,16 +31,24 @@ export async function loadManagedPlugins(
   entries: LockEntry[],
   input: PluginInput,
   cache: CacheContext,
+  logger: Logger = createConsoleLogger(),
 ): Promise<LoadedPlugin[]> {
   const loaded: LoadedPlugin[] = []
 
   for (const entry of entries) {
     try {
       if (!(await isTrustedLockEntryPath(cache, entry))) {
-        console.warn(`[plugin-manager] Skipping untrusted plugin path for ${entry.id}: ${entry.resolvedPath}`)
+        logger.warn(`[plugin-manager] Skipping untrusted plugin path for ${entry.id}: ${entry.resolvedPath}`, {
+          pluginID: entry.id,
+          resolvedPath: entry.resolvedPath,
+        })
         continue
       }
       const moduleUrl = pathToFileURL(entry.resolvedPath).href
+      logger.debug("Loading managed plugin module", {
+        pluginID: entry.id,
+        moduleUrl,
+      })
       const mod = (await import(moduleUrl)) as Record<string, unknown>
       const defaultExport = mod.default
       let pluginFactory: PluginFactory | undefined
@@ -60,8 +70,14 @@ export async function loadManagedPlugins(
         id: entry.id,
         hooks,
       })
+      logger.info("Managed plugin loaded", {
+        pluginID: entry.id,
+      })
     } catch (error) {
-      console.warn(`[plugin-manager] Failed to load ${entry.id}: ${String(error)}`)
+      logger.warn(`[plugin-manager] Failed to load ${entry.id}: ${String(error)}`, {
+        pluginID: entry.id,
+        error: String(error),
+      })
     }
   }
 
@@ -74,7 +90,7 @@ export type MergedManagedHooks = {
   collectAuth: () => Hooks["auth"]
 }
 
-export function mergeManagedHooks(getLoaded: () => LoadedPlugin[]): MergedManagedHooks {
+export function mergeManagedHooks(getLoaded: () => LoadedPlugin[], logger: Logger = createConsoleLogger()): MergedManagedHooks {
   const hooks: Hooks = {}
 
   hooks.event = async (input) => {
@@ -82,7 +98,7 @@ export function mergeManagedHooks(getLoaded: () => LoadedPlugin[]): MergedManage
       try {
         await plugin.hooks.event?.(input)
       } catch (error) {
-        console.warn(`[plugin-manager] Hook event failed in ${plugin.id}: ${String(error)}`)
+        logger.warn(`[plugin-manager] Hook event failed in ${plugin.id}: ${String(error)}`, { hook: "event", pluginID: plugin.id })
       }
     }
   }
@@ -92,7 +108,7 @@ export function mergeManagedHooks(getLoaded: () => LoadedPlugin[]): MergedManage
       try {
         await plugin.hooks.config?.(input)
       } catch (error) {
-        console.warn(`[plugin-manager] Hook config failed in ${plugin.id}: ${String(error)}`)
+        logger.warn(`[plugin-manager] Hook config failed in ${plugin.id}: ${String(error)}`, { hook: "config", pluginID: plugin.id })
       }
     }
   }
@@ -105,7 +121,10 @@ export function mergeManagedHooks(getLoaded: () => LoadedPlugin[]): MergedManage
         try {
           await (hook as (input: unknown, output: unknown) => Promise<void>)(input, output)
         } catch (error) {
-          console.warn(`[plugin-manager] Hook ${hookName} failed in ${plugin.id}: ${String(error)}`)
+          logger.warn(`[plugin-manager] Hook ${hookName} failed in ${plugin.id}: ${String(error)}`, {
+            hook: hookName,
+            pluginID: plugin.id,
+          })
         }
       }
     }
@@ -118,10 +137,22 @@ export function mergeManagedHooks(getLoaded: () => LoadedPlugin[]): MergedManage
     for (const plugin of getLoaded()) {
       if (!plugin.hooks.tool) continue
       for (const [name, definition] of Object.entries(plugin.hooks.tool)) {
-        if (tools[name]) {
-          console.warn(`[plugin-manager] Tool collision for '${name}', overriding with ${plugin.id}`)
+        const sanitizedName = sanitizeToolName(name)
+        if (sanitizedName !== name) {
+          logger.warn(`[plugin-manager] Sanitized invalid tool name '${name}' -> '${sanitizedName}'`, {
+            pluginID: plugin.id,
+            originalName: name,
+            sanitizedName,
+          })
         }
-        tools[name] = definition
+
+        if (tools[sanitizedName]) {
+          logger.warn(`[plugin-manager] Tool collision for '${sanitizedName}', overriding with ${plugin.id}`, {
+            toolName: sanitizedName,
+            pluginID: plugin.id,
+          })
+        }
+        tools[sanitizedName] = definition
       }
     }
     return tools
@@ -132,7 +163,7 @@ export function mergeManagedHooks(getLoaded: () => LoadedPlugin[]): MergedManage
     for (const plugin of getLoaded()) {
       if (!plugin.hooks.auth) continue
       if (auth) {
-        console.warn(`[plugin-manager] Auth hook collision, overriding with ${plugin.id}`)
+        logger.warn(`[plugin-manager] Auth hook collision, overriding with ${plugin.id}`, { pluginID: plugin.id })
       }
       auth = plugin.hooks.auth
     }

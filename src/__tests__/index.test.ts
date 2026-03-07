@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import semver from "semver"
 import type { MergedConfig } from "../config"
 import type { LockEntry, Lockfile } from "../types"
@@ -21,6 +21,7 @@ const mockExists = mock()
 
 const mockFsReadFile = mock()
 const mockFetch = mock()
+const mockAppLog = mock()
 const managedConfigHook = mock(async () => undefined)
 
 mock.module("../index.deps", () => ({
@@ -67,6 +68,21 @@ function makeToolContext(): any {
   }
 }
 
+function makePluginInput(overrides: Record<string, unknown> = {}): any {
+  return {
+    client: {
+      app: {
+        log: mockAppLog,
+      },
+    },
+    ...overrides,
+  }
+}
+
+function hasLogged(level: string, message: string): boolean {
+  return mockAppLog.mock.calls.some(([payload]) => payload?.body?.level === level && payload?.body?.message === message)
+}
+
 
 beforeEach(() => {
   for (const fn of [
@@ -83,6 +99,7 @@ beforeEach(() => {
     mockExists,
     mockFsReadFile,
     mockFetch,
+    mockAppLog,
     managedConfigHook,
   ]) {
     fn.mockReset()
@@ -125,6 +142,7 @@ beforeEach(() => {
     ok: true,
     json: async () => ({ version: "1.0.0" }),
   })
+  mockAppLog.mockResolvedValue(true)
 
   globalThis.fetch = mockFetch as unknown as typeof fetch
 })
@@ -141,16 +159,11 @@ describe("PluginManager config hook", () => {
       }),
     )
 
-    const hooks = (await PluginManager({} as never)) as any
-    const infoSpy = spyOn(console, "info").mockImplementation(() => undefined)
+    const hooks = (await PluginManager(makePluginInput())) as any
+    await hooks.config({})
 
-    try {
-      await hooks.config({})
-      expect(infoSpy).toHaveBeenCalledWith("[plugin-manager] No plugins.json found")
-      expect(managedConfigHook).toHaveBeenCalledWith({})
-    } finally {
-      infoSpy.mockRestore()
-    }
+    expect(hasLogged("info", "[plugin-manager] No plugins.json found")).toBe(true)
+    expect(managedConfigHook).toHaveBeenCalledWith({})
   })
 
   test("logs when plugins.json exists but has no plugin entries", async () => {
@@ -160,33 +173,23 @@ describe("PluginManager config hook", () => {
       }),
     )
 
-    const hooks = (await PluginManager({} as never)) as any
-    const infoSpy = spyOn(console, "info").mockImplementation(() => undefined)
+    const hooks = (await PluginManager(makePluginInput())) as any
+    await hooks.config({})
 
-    try {
-      await hooks.config({})
-      expect(infoSpy).toHaveBeenCalledWith("[plugin-manager] plugins.json found, but no plugins are configured")
-    } finally {
-      infoSpy.mockRestore()
-    }
+    expect(hasLogged("info", "[plugin-manager] plugins.json found, but no plugins are configured")).toBe(true)
   })
 
   test("logs when plugins are configured but none are loaded", async () => {
     mockLoadManagedPlugins.mockResolvedValue([])
 
-    const hooks = (await PluginManager({} as never)) as any
-    const infoSpy = spyOn(console, "info").mockImplementation(() => undefined)
+    const hooks = (await PluginManager(makePluginInput())) as any
+    await hooks.config({})
 
-    try {
-      await hooks.config({})
-      expect(infoSpy).toHaveBeenCalledWith("[plugin-manager] No cached plugins loaded. Run tool: opm.install")
-    } finally {
-      infoSpy.mockRestore()
-    }
+    expect(hasLogged("info", "[plugin-manager] No cached plugins loaded. Run tool: opm_install")).toBe(true)
   })
 })
 
-describe("opm.install", () => {
+describe("opm_install", () => {
   test("syncs with install mode, writes lockfile, reloads plugins, and returns install summary", async () => {
     const spec = makeSpec("npm", { id: "npm:install", name: "install-plugin" })
     const mergedConfig = makeMergedConfig({ plugins: [spec] })
@@ -217,38 +220,44 @@ describe("opm.install", () => {
     })
     mockResolveCachedPluginPaths.mockResolvedValue([updatedEntry])
 
-    const hooks = (await PluginManager({ cwd: "/workspace" } as never)) as any
+    const hooks = (await PluginManager(makePluginInput({ cwd: "/workspace" }))) as any
     const context = makeToolContext()
-    const warnSpy = spyOn(console, "warn").mockImplementation(() => undefined)
+    const output = await hooks.tool["opm_install"].execute({}, context)
 
-    try {
-      const output = await hooks.tool["opm.install"].execute({}, context)
-
-      expect(context.metadata).toHaveBeenCalledWith({ title: "Installing managed plugins" })
-      expect(mockSyncPlugins).toHaveBeenCalledWith({
+    expect(context.metadata).toHaveBeenCalledWith({ title: "Installing managed plugins" })
+    expect(mockSyncPlugins).toHaveBeenCalledWith(
+      expect.objectContaining({
         specs: mergedConfig.plugins,
         cache,
         currentLock,
         mode: "install",
-      })
-      expect(mockWriteLockfile).toHaveBeenCalledWith(cache.lockfilePath, syncedLock)
-      expect(mockResolveCachedPluginPaths).toHaveBeenLastCalledWith(mergedConfig.plugins, syncedLock, cache)
-      expect(mockLoadManagedPlugins).toHaveBeenLastCalledWith([updatedEntry], { cwd: "/workspace" }, cache)
-      expect(warnSpy).toHaveBeenCalledWith("[plugin-manager] warning")
+      }),
+    )
+    expect(mockWriteLockfile).toHaveBeenCalledWith(cache.lockfilePath, syncedLock)
+    expect(mockResolveCachedPluginPaths).toHaveBeenLastCalledWith(
+      mergedConfig.plugins,
+      syncedLock,
+      cache,
+      expect.anything(),
+    )
+    expect(mockLoadManagedPlugins).toHaveBeenLastCalledWith(
+      [updatedEntry],
+      expect.objectContaining({ cwd: "/workspace" }),
+      cache,
+      expect.anything(),
+    )
+    expect(hasLogged("warn", "[plugin-manager] warning")).toBe(true)
 
-      expect(output).toContain("Installed 1 plugin(s).")
-      expect(output).toContain(`Installed: ${spec.id} (install)`)
-      expect(output).toContain("Reused cache: npm:cached-plugin")
-      expect(output).toContain("Warnings: 1")
-      expect(output).toContain("State transitions:")
-      expect(output).toContain(`${spec.id}: npm:${spec.name}@1.5.0 -> npm:${spec.name}@2.0.0`)
-    } finally {
-      warnSpy.mockRestore()
-    }
+    expect(output).toContain("Installed 1 plugin(s).")
+    expect(output).toContain(`Installed: ${spec.id} (install)`)
+    expect(output).toContain("Reused cache: npm:cached-plugin")
+    expect(output).toContain("Warnings: 1")
+    expect(output).toContain("State transitions:")
+    expect(output).toContain(`${spec.id}: npm:${spec.name}@1.5.0 -> npm:${spec.name}@2.0.0`)
   })
 })
 
-describe("opm.update", () => {
+describe("opm_update", () => {
   test("syncs with update mode and returns update summary", async () => {
     const spec = makeSpec("git", {
       id: "git:update",
@@ -282,9 +291,9 @@ describe("opm.update", () => {
       warnings: [],
     })
 
-    const hooks = (await PluginManager({} as never)) as any
+    const hooks = (await PluginManager(makePluginInput())) as any
     const context = makeToolContext()
-    const output = await hooks.tool["opm.update"].execute({}, context)
+    const output = await hooks.tool["opm_update"].execute({}, context)
 
     expect(context.metadata).toHaveBeenCalledWith({ title: "Updating managed plugins" })
     expect(mockSyncPlugins).toHaveBeenCalledWith(
@@ -300,7 +309,7 @@ describe("opm.update", () => {
   })
 })
 
-describe("opm.clean and pruneLockfile behavior", () => {
+describe("opm_clean and pruneLockfile behavior", () => {
   test("prunes unconfigured and missing entries, keeps existing configured entries, and reports cleanup", async () => {
     const keepSpec = makeSpec("npm", { id: "npm:keep", name: "keep-plugin" })
     const missingSpec = makeSpec("git", {
@@ -348,18 +357,23 @@ describe("opm.clean and pruneLockfile behavior", () => {
     })
     mockResolveCachedPluginPaths.mockResolvedValue([keepEntry])
 
-    const hooks = (await PluginManager({} as never)) as any
+    const hooks = (await PluginManager(makePluginInput())) as any
     const context = makeToolContext()
-    const output = await hooks.tool["opm.clean"].execute({}, context)
+    const output = await hooks.tool["opm_clean"].execute({}, context)
 
     expect(context.metadata).toHaveBeenCalledWith({ title: "Cleaning managed plugin cache" })
     expect(mockExists).toHaveBeenCalledWith(missingEntry.resolvedPath)
     expect(mockExists).toHaveBeenCalledWith(keepEntry.resolvedPath)
 
-    expect(mockCleanCacheDirectories).toHaveBeenCalledWith(cache, prunedLock)
+    expect(mockCleanCacheDirectories).toHaveBeenCalledWith(cache, prunedLock, expect.anything())
     expect(mockWriteLockfile).toHaveBeenCalledWith(cache.lockfilePath, prunedLock)
-    expect(mockResolveCachedPluginPaths).toHaveBeenLastCalledWith(mergedConfig.plugins, prunedLock, cache)
-    expect(mockLoadManagedPlugins).toHaveBeenLastCalledWith([keepEntry], {}, cache)
+    expect(mockResolveCachedPluginPaths).toHaveBeenLastCalledWith(
+      mergedConfig.plugins,
+      prunedLock,
+      cache,
+      expect.anything(),
+    )
+    expect(mockLoadManagedPlugins).toHaveBeenLastCalledWith([keepEntry], expect.objectContaining({}), cache, expect.anything())
 
     expect(output).toContain("Removed 2 cached plugin directory(s).")
     expect(output).toContain(`Pruned lock entries: ${staleEntry.id}, ${missingEntry.id}`)
@@ -367,7 +381,7 @@ describe("opm.clean and pruneLockfile behavior", () => {
   })
 })
 
-describe("opm.sync", () => {
+describe("opm_sync", () => {
   test("runs install then clean sequentially and combines both outputs", async () => {
     const spec = makeSpec("npm", { id: "npm:sync", name: "sync-plugin" })
     const mergedConfig = makeMergedConfig({ plugins: [spec] })
@@ -401,9 +415,9 @@ describe("opm.sync", () => {
     })
     mockResolveCachedPluginPaths.mockResolvedValue([lockEntry])
 
-    const hooks = (await PluginManager({} as never)) as any
+    const hooks = (await PluginManager(makePluginInput())) as any
     const context = makeToolContext()
-    const output = await hooks.tool["opm.sync"].execute({}, context)
+    const output = await hooks.tool["opm_sync"].execute({}, context)
 
     expect(callOrder).toEqual(["install", "clean"])
     expect(context.metadata).toHaveBeenNthCalledWith(1, { title: "Syncing managed plugins" })
@@ -415,7 +429,7 @@ describe("opm.sync", () => {
   })
 })
 
-describe("opm.self-update", () => {
+describe("opm_self_update", () => {
   test("returns update instructions when a newer release exists", async () => {
     mockFsReadFile.mockResolvedValue(JSON.stringify({ version: "1.0.0" }))
     mockFetch.mockResolvedValue({
@@ -423,9 +437,9 @@ describe("opm.self-update", () => {
       json: async () => ({ version: "1.1.0" }),
     })
 
-    const hooks = (await PluginManager({} as never)) as any
+    const hooks = (await PluginManager(makePluginInput())) as any
     const context = makeToolContext()
-    const output = await hooks.tool["opm.self-update"].execute({}, context)
+    const output = await hooks.tool["opm_self_update"].execute({}, context)
 
     expect(context.metadata).toHaveBeenCalledWith({ title: "Checking plugin manager updates" })
     expect(output).toContain("Update available: 1.0.0 -> 1.1.0")
@@ -440,8 +454,8 @@ describe("opm.self-update", () => {
       json: async () => ({ version: "2.0.0" }),
     })
 
-    const hooks = (await PluginManager({} as never)) as any
-    const output = await hooks.tool["opm.self-update"].execute({}, makeToolContext())
+    const hooks = (await PluginManager(makePluginInput())) as any
+    const output = await hooks.tool["opm_self_update"].execute({}, makeToolContext())
 
     expect(output).toBe("opencode-plugin-manager is up to date (2.0.0).")
   })
@@ -449,8 +463,8 @@ describe("opm.self-update", () => {
   test("handles missing version data gracefully", async () => {
     mockFetch.mockRejectedValue(new Error("network failed"))
 
-    const hooks = (await PluginManager({} as never)) as any
-    const output = await hooks.tool["opm.self-update"].execute({}, makeToolContext())
+    const hooks = (await PluginManager(makePluginInput())) as any
+    const output = await hooks.tool["opm_self_update"].execute({}, makeToolContext())
 
     expect(output).toBe("Unable to determine current or latest opencode-plugin-manager version.")
   })

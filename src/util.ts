@@ -4,6 +4,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { parse as parseJsonc } from "jsonc-parser"
+import type { Logger } from "./log"
 
 export async function exists(filePath: string): Promise<boolean> {
   try {
@@ -34,6 +35,10 @@ export function sanitizeSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, "_")
 }
 
+export function sanitizeToolName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "_")
+}
+
 export async function sha256File(filePath: string): Promise<string> {
   const hash = createHash("sha256")
   hash.update(await fs.readFile(filePath))
@@ -59,8 +64,19 @@ export async function runCommand(input: {
   cwd?: string
   timeout?: number
   env?: NodeJS.ProcessEnv
+  logger?: Logger
 }): Promise<{ stdout: string; stderr: string }> {
-  const { command, args, cwd, timeout, env } = input
+  const { command, args, cwd, timeout, env, logger } = input
+  const commandString = [command, ...args].join(" ")
+  const startedAt = Date.now()
+
+  logger?.debug("Executing command", {
+    command,
+    args,
+    commandString,
+    cwd: cwd ?? process.cwd(),
+    timeout,
+  })
 
   return await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -81,6 +97,11 @@ export async function runCommand(input: {
     let timer: NodeJS.Timeout | undefined
     if (timeout) {
       timer = setTimeout(() => {
+        logger?.warn("Command timeout reached; sending SIGTERM", {
+          commandString,
+          timeout,
+          cwd: cwd ?? process.cwd(),
+        })
         child.kill("SIGTERM")
       }, timeout)
     }
@@ -88,7 +109,31 @@ export async function runCommand(input: {
     child.on("error", reject)
     child.on("close", (code) => {
       if (timer) clearTimeout(timer)
-      if (code === 0) return resolve({ stdout, stderr })
+      const durationMs = Date.now() - startedAt
+
+      if (code === 0) {
+        logger?.debug("Command completed", {
+          command,
+          args,
+          commandString,
+          cwd: cwd ?? process.cwd(),
+          durationMs,
+          stdout: stdout.trim() || undefined,
+          stderr: stderr.trim() || undefined,
+        })
+        return resolve({ stdout, stderr })
+      }
+
+      logger?.error("Command failed", {
+        command,
+        args,
+        commandString,
+        cwd: cwd ?? process.cwd(),
+        durationMs,
+        exitCode: code,
+        stdout: stdout.trim() || undefined,
+        stderr: stderr.trim() || undefined,
+      })
       reject(new Error(`${command} ${args.join(" ")} failed with exit code ${code}: ${stderr || stdout}`))
     })
   })

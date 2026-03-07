@@ -2,7 +2,7 @@
 
 `opencode-plugin-manager` is an opencode meta-plugin that manages plugin sources from npm, git repositories, and local paths.
 
-It does not auto-download on startup. You explicitly run `opm.sync` to install/update plugins, and startup loads from locked plugin paths.
+It does not auto-download on startup. You explicitly run `opm_sync` to install/update plugins, and startup loads from locked plugin paths.
 
 ## Install
 
@@ -13,6 +13,15 @@ Add the plugin manager to your opencode config:
   "plugin": ["opencode-plugin-manager"]
 }
 ```
+
+For local testing without publishing to npm:
+
+```sh
+bun run bundle
+cp dist/plugin-manager.js ~/.config/opencode/plugins/plugin-manager.js
+```
+
+OpenCode autoloads `.js` files from `~/.config/opencode/plugins/`, so no `opencode.json` plugin entry is needed for this local test flow.
 
 ## Configure plugins
 
@@ -47,11 +56,11 @@ Create `plugins.json` (or `plugins.jsonc`) in your global opencode config direct
 
 Run tools from opencode:
 
-- `opm.install` installs plugins from `plugins.json` and reuses compatible locked versions.
-- `opm.update` refreshes plugins to the newest versions matching configured constraints.
-- `opm.clean` removes cached plugin directories and lock entries that are no longer referenced.
-- `opm.sync` runs install and then clean.
-- `opm.self-update` checks npm for a newer `opencode-plugin-manager` release and tells you what to pin in `opencode.json`.
+- `opm_install` installs plugins from `plugins.json` and reuses compatible locked versions.
+- `opm_update` refreshes plugins to the newest versions matching configured constraints.
+- `opm_clean` removes cached plugin directories and lock entries that are no longer referenced.
+- `opm_sync` runs install and then clean.
+- `opm_self_update` checks npm for a newer `opencode-plugin-manager` release and tells you what to pin in `opencode.json`.
 
 Install/update writes `plugins.lock.json` in the configured cache directory.
 Install/update output also includes per-plugin state transitions (`before -> after`) with resolved versions/commits.
@@ -65,23 +74,23 @@ opencode slash commands are prompt templates, so add command entries that call t
   "command": {
     "opm-install": {
       "description": "Install managed plugins",
-      "template": "Run the opm.install tool to install managed plugins from plugins.json."
+      "template": "Run the opm_install tool to install managed plugins from plugins.json."
     },
     "opm-update": {
       "description": "Update managed plugins",
-      "template": "Run the opm.update tool to update managed plugins to the highest versions that match constraints."
+      "template": "Run the opm_update tool to update managed plugins to the highest versions that match constraints."
     },
     "opm-clean": {
       "description": "Clean stale managed plugin cache",
-      "template": "Run the opm.clean tool to remove stale managed plugin cache entries and prune lock entries."
+      "template": "Run the opm_clean tool to remove stale managed plugin cache entries and prune lock entries."
     },
     "opm-sync": {
       "description": "Install then clean managed plugins",
-      "template": "Run the opm.sync tool to install managed plugins and then clean stale cache entries."
+      "template": "Run the opm_sync tool to install managed plugins and then clean stale cache entries."
     },
     "opm-self-update": {
       "description": "Check plugin-manager updates",
-      "template": "Run the opm.self-update tool and report whether an update is available."
+      "template": "Run the opm_self_update tool and report whether an update is available."
     }
   }
 }

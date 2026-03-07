@@ -185,6 +185,20 @@ describe("mergeManagedHooks", () => {
     )
   })
 
+  test("collectTools sanitizes tool names to valid identifiers", () => {
+    const dottedTool = { description: "dotted" } as any
+    const plugins = [{ id: "a", hooks: { tool: { "managed.tool": dottedTool } } }]
+
+    const merged = mergeManagedHooks(() => plugins as any)
+    const tools = merged.collectTools()
+
+    expect(tools.managed_tool).toBe(dottedTool)
+    expect((tools as Record<string, unknown>)["managed.tool"]).toBeUndefined()
+    expect(
+      warningMessages().some((message) => message.includes("Sanitized invalid tool name 'managed.tool' -> 'managed_tool'")),
+    ).toBe(true)
+  })
+
   test("collectAuth returns single auth when only one plugin provides it", () => {
     const auth = { challenge: async () => ({ token: "x" }) } as any
     const plugins = [{ id: "a", hooks: { auth } }, { id: "b", hooks: {} }]

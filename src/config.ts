@@ -1,5 +1,6 @@
 import type { PluginInput as RuntimePluginInput } from "@opencode-ai/plugin"
 import path from "node:path"
+import { createConsoleLogger, type Logger } from "./log"
 import { PluginsFileSchema, type ManagedPluginSpec, type NormalizedPluginSpec, type PluginsFile } from "./types"
 import { exists, expandHome, fs, normalizeGitRepo, os, parseNpmShorthand, readJsoncFile } from "./config.deps"
 
@@ -12,7 +13,7 @@ export type MergedConfig = {
   plugins: ManagedPluginSpec[]
 }
 
-export async function loadMergedConfig(input: RuntimePluginInput): Promise<MergedConfig> {
+export async function loadMergedConfig(input: RuntimePluginInput, logger: Logger = createConsoleLogger()): Promise<MergedConfig> {
   const files = await discoverConfigFiles()
   const merged = new Map<string, ManagedPluginSpec>()
 
@@ -20,7 +21,7 @@ export async function loadMergedConfig(input: RuntimePluginInput): Promise<Merge
   let cacheDirBase: string | undefined
 
   for (const file of files) {
-    const parsed = await parseConfigFile(file)
+    const parsed = await parseConfigFile(file, logger)
     if (!parsed) continue
 
     if (parsed.cacheDir) {
@@ -120,12 +121,15 @@ function resolveLocalPath(value: string, fromFile: string): string {
   return path.resolve(baseDir, expandHome(value))
 }
 
-async function parseConfigFile(filePath: string): Promise<PluginsFile | null> {
+async function parseConfigFile(filePath: string, logger: Logger): Promise<PluginsFile | null> {
   const raw = await readJsoncFile<unknown>(filePath)
   if (!raw) return null
   const parsed = PluginsFileSchema.safeParse(raw)
   if (!parsed.success) {
-    console.warn(`[plugin-manager] Invalid config at ${filePath}: ${parsed.error.message}`)
+    logger.warn(`[plugin-manager] Invalid config at ${filePath}: ${parsed.error.message}`, {
+      filePath,
+      error: parsed.error.message,
+    })
     return null
   }
   return parsed.data

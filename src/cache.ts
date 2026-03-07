@@ -1,8 +1,10 @@
 import os from "node:os"
 import path from "node:path"
 import type { MergedConfig } from "./config"
+import type { Logger } from "./log"
 import { CACHEABLE_LOCK_ENTRY_SOURCES, LockfileSchema, type LockEntry, type Lockfile } from "./types"
 import { ensureDir, exists, expandHome, fs, sanitizeSegment, sleep } from "./cache.deps"
+import { createConsoleLogger } from "./log"
 
 const LOCKFILE_NAME = "plugins.lock.json"
 const LOCK_MUTEX_NAME = ".manager.lock"
@@ -27,7 +29,7 @@ export function resolveCacheContext(config: MergedConfig): CacheContext {
   }
 }
 
-export async function readLockfile(lockfilePath: string): Promise<Lockfile> {
+export async function readLockfile(lockfilePath: string, logger: Logger = createConsoleLogger()): Promise<Lockfile> {
   if (!(await exists(lockfilePath))) {
     return { version: 1, plugins: {} }
   }
@@ -37,12 +39,18 @@ export async function readLockfile(lockfilePath: string): Promise<Lockfile> {
     const value = JSON.parse(text) as unknown
     const parsed = LockfileSchema.safeParse(value)
     if (!parsed.success) {
-      console.warn(`[plugin-manager] Invalid lockfile ${lockfilePath}: ${parsed.error.message}`)
+      logger.warn("Invalid lockfile; ignoring and continuing", {
+        lockfilePath,
+        error: parsed.error.message,
+      })
       return { version: 1, plugins: {} }
     }
     return parsed.data
   } catch (error) {
-    console.warn(`[plugin-manager] Failed to read lockfile ${lockfilePath}: ${String(error)}`)
+    logger.warn("Failed to read lockfile; ignoring and continuing", {
+      lockfilePath,
+      error: String(error),
+    })
     return { version: 1, plugins: {} }
   }
 }
@@ -63,23 +71,39 @@ export async function withCacheLock<T>(
   cache: CacheContext,
   fn: () => Promise<T>,
   timeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
+  logger: Logger = createConsoleLogger(),
 ): Promise<T> {
   await ensureDir(cache.rootDir)
+  logger.debug("Acquiring cache lock", {
+    rootDir: cache.rootDir,
+    mutexPath: cache.mutexPath,
+    timeoutMs,
+  })
 
   const start = Date.now()
   while (true) {
     try {
       const handle = await fs.open(cache.mutexPath, "wx", 0o600)
+      logger.debug("Cache lock acquired", {
+        mutexPath: cache.mutexPath,
+      })
       try {
         return await fn()
       } finally {
         await handle.close().catch(() => undefined)
         await fs.unlink(cache.mutexPath).catch(() => undefined)
+        logger.debug("Cache lock released", {
+          mutexPath: cache.mutexPath,
+        })
       }
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
       if (code !== "EEXIST") throw error
       if (Date.now() - start > timeoutMs) {
+        logger.error("Timed out waiting for cache lock", {
+          mutexPath: cache.mutexPath,
+          timeoutMs,
+        })
         throw new Error(`Timed out waiting for cache lock: ${cache.mutexPath}`)
       }
       await sleep(DEFAULT_LOCK_RETRY_MS)
@@ -135,7 +159,11 @@ export type CleanCacheResult = {
   removedPaths: string[]
 }
 
-export async function cleanCacheDirectories(cache: CacheContext, lockfile: Lockfile): Promise<CleanCacheResult> {
+export async function cleanCacheDirectories(
+  cache: CacheContext,
+  lockfile: Lockfile,
+  logger: Logger = createConsoleLogger(),
+): Promise<CleanCacheResult> {
   const keep = new Set<string>()
   for (const entry of Object.values(lockfile.plugins)) {
     const installRoot = installRootForEntry(cache, entry)
@@ -156,6 +184,9 @@ export async function cleanCacheDirectories(cache: CacheContext, lockfile: Lockf
 
       await fs.rm(childPath, { recursive: true, force: true })
       removedPaths.push(childPath)
+      logger.debug("Removed stale cached plugin directory", {
+        path: childPath,
+      })
     }
   }
 

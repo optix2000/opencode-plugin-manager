@@ -6,8 +6,10 @@
   "main": "src/index.ts",
   "license": "MIT",
   "scripts": {
+    "bundle": "bun run bundle.ts",
     "test": "bun test",
-    "typecheck": "npx tsc --noEmit"
+    "typecheck": "npx tsc --noEmit",
+    "prepublishOnly": "bun run bundle"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "*"
