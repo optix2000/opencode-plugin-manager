@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/optix2000/opencode-plugin-manager/main/plugins.schema.json",
+  "title": "opencode-plugin-manager plugins.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "cacheDir": {
+      "type": "string",
+      "description": "Optional plugin cache directory. Defaults to ~/.cache/opencode/opm"
+    },
+    "autoinstall": {
+      "type": "boolean",
+      "description": "Automatically run install on startup so new plugins are available without a manual tool call or restart",
+      "default": false
+    },
+    "autoprune": {
+      "type": "boolean",
+      "description": "Automatically prune stale cache directories on startup so removed plugins are cleaned up without a manual tool call or restart",
+      "default": false
+    },
+    "plugins": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "npm shorthand (my-plugin@1.2.3) or local path shorthand (./plugin, ../plugin, /abs/plugin, ~/plugin)"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "path"
+            ],
+            "properties": {
+              "source": {
+                "const": "local"
+              },
+              "path": {
+                "type": "string"
+              },
+              "entry": {
+                "type": "string"
+              },
+              "build": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "command"
+                ],
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "timeout": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 300000
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "name"
+            ],
+            "properties": {
+              "source": {
+                "const": "npm"
+              },
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "entry": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "repo"
+            ],
+            "properties": {
+              "source": {
+                "const": "git"
+              },
+              "repo": {
+                "type": "string",
+                "description": "Git repository URL or SCP-style address (e.g. git@github.com:user/repo.git)"
+              },
+              "ref": {
+                "type": "string"
+              },
+              "entry": {
+                "type": "string"
+              },
+              "build": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "command"
+                ],
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "timeout": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 300000
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "plugins"
+  ]
+}
