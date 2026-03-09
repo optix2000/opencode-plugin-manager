@@ -239,15 +239,15 @@ export function gitInstallDir(cache: CacheContext, repo: string, commit: string)
   return path.join(sourceDir(cache, "git"), `${sanitizeSegment(repo)}-${sanitizeSegment(commit.slice(0, 12))}`)
 }
 
-export type CleanCacheResult = {
+export type PruneCacheResult = {
   removedPaths: string[]
 }
 
-export async function cleanCacheDirectories(
+export async function pruneCacheDirectories(
   cache: CacheContext,
   lockfile: Lockfile,
   logger: Logger = createConsoleLogger(),
-): Promise<CleanCacheResult> {
+): Promise<PruneCacheResult> {
   const keep = new Set<string>()
   for (const entry of Object.values(lockfile.plugins)) {
     const installRoot = installRootForEntry(cache, entry)

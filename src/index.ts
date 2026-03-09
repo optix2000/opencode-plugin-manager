@@ -2,12 +2,12 @@ import type { Plugin, ToolContext } from "@opencode-ai/plugin"
 import semver from "semver"
 import { createNoopLogger, createOpencodeLogger } from "./log"
 import {
-  cleanCacheDirectories,
   exists,
   fs,
   loadManagedPlugins,
   loadMergedConfig,
   mergeManagedHooks,
+  pruneCacheDirectories,
   readLockfile,
   resolveCacheContext,
   resolveCachedPluginPaths,
@@ -26,7 +26,7 @@ export const PluginManager: Plugin = async (input) => {
   const TOOL_IDS = {
     install: "opm_install",
     update: "opm_update",
-    clean: "opm_clean",
+    prune: "opm_prune",
     sync: "opm_sync",
     selfUpdate: "opm_self_update",
   } as const
@@ -44,6 +44,28 @@ export const PluginManager: Plugin = async (input) => {
   const initialEntries = await resolveCachedPluginPaths(mergedConfig.plugins, initialLockfile, cache, logger)
   let loaded = await loadManagedPlugins(initialEntries, input, cache, logger, nextReloadOptions("startup"))
 
+  if (mergedConfig.autoinstall) {
+    try {
+      logger.info("Autoinstall enabled, running install on startup")
+      await runInstallOrUpdateCore("install", mergedConfig, cache)
+    } catch (error) {
+      logger.warn(`[plugin-manager] Autoinstall failed on startup: ${String(error)}`, {
+        error: String(error),
+      })
+    }
+  }
+
+  if (mergedConfig.autoprune) {
+    try {
+      logger.info("Autoprune enabled, running prune on startup")
+      await runPruneCore(mergedConfig, cache)
+    } catch (error) {
+      logger.warn(`[plugin-manager] Autoprune failed on startup: ${String(error)}`, {
+        error: String(error),
+      })
+    }
+  }
+
   const managed = mergeManagedHooks(() => loaded, logger)
 
   const installTool = tool({
@@ -58,16 +80,16 @@ export const PluginManager: Plugin = async (input) => {
     execute: async (_, context) => runInstallOrUpdate("update", context),
   })
 
-  const cleanTool = tool({
+  const pruneTool = tool({
     description: "Remove cached plugin versions not referenced by the current config",
     args: {},
-    execute: async (_, context) => runClean(context),
+    execute: async (_, context) => runPrune(context),
   })
 
   const syncTool = tool({
-    description: "Install plugins and then clean stale cached versions",
+    description: "Install plugins and then prune stale cached versions",
     args: {},
-    execute: async (_, context) => runInstallThenClean(context),
+    execute: async (_, context) => runInstallThenPrune(context),
   })
 
   const selfUpdateTool = tool({
@@ -120,7 +142,7 @@ export const PluginManager: Plugin = async (input) => {
         ...managed.collectTools(),
         [TOOL_IDS.install]: installTool,
         [TOOL_IDS.update]: updateTool,
-        [TOOL_IDS.clean]: cleanTool,
+        [TOOL_IDS.prune]: pruneTool,
         [TOOL_IDS.sync]: syncTool,
         [TOOL_IDS.selfUpdate]: selfUpdateTool,
       }
@@ -136,7 +158,7 @@ export const PluginManager: Plugin = async (input) => {
         logger.info("[plugin-manager] plugins.json found, but no plugins are configured")
         return
       }
-      if (!loaded.length) {
+      if (!loaded.length && !mergedConfig.autoinstall) {
         logger.info(`[plugin-manager] No cached plugins loaded. Run tool: ${TOOL_IDS.install}`)
       }
     },
@@ -209,23 +231,23 @@ export const PluginManager: Plugin = async (input) => {
     return lines.join("\n")
   }
 
-  async function runClean(context: ToolContext): Promise<string> {
-    context.metadata({ title: "Cleaning managed plugin cache" })
+  async function runPrune(context: ToolContext): Promise<string> {
+    context.metadata({ title: "Pruning managed plugin cache" })
     mergedConfig = await loadMergedConfig(input, logger)
     cache = resolveCacheContext(mergedConfig)
-    return runCleanCore(mergedConfig, cache)
+    return runPruneCore(mergedConfig, cache)
   }
 
-  async function runCleanCore(activeMergedConfig: typeof mergedConfig, activeCache: typeof cache): Promise<string> {
+  async function runPruneCore(activeMergedConfig: typeof mergedConfig, activeCache: typeof cache): Promise<string> {
     logger.info("Running plugin manager tool", {
-      tool: TOOL_IDS.clean,
+      tool: TOOL_IDS.prune,
     })
 
     const result = await withCacheLock(activeCache, async () => {
       const current = await readLockfile(activeCache.lockfilePath, logger)
       const configuredIDs = new Set(activeMergedConfig.plugins.map((plugin) => plugin.id))
       const pruned = await pruneLockfile(current, configuredIDs)
-      const cleaned = await cleanCacheDirectories(activeCache, pruned.lockfile, logger)
+      const cleaned = await pruneCacheDirectories(activeCache, pruned.lockfile, logger)
       await writeLockfile(activeCache.lockfilePath, pruned.lockfile)
       return {
         lockfile: pruned.lockfile,
@@ -235,21 +257,21 @@ export const PluginManager: Plugin = async (input) => {
     }, undefined, logger)
 
     const refreshedEntries = await resolveCachedPluginPaths(activeMergedConfig.plugins, result.lockfile, activeCache, logger)
-    loaded = await loadManagedPlugins(refreshedEntries, input, activeCache, logger, nextReloadOptions("tool:clean"))
+    loaded = await loadManagedPlugins(refreshedEntries, input, activeCache, logger, nextReloadOptions("tool:prune"))
 
     const lines: string[] = []
     lines.push(`Removed ${result.removedPaths.length} cached plugin directory(s).`)
     if (result.prunedIDs.length) lines.push(`Pruned lock entries: ${result.prunedIDs.join(", ")}`)
     if (result.removedPaths.length) lines.push(`Removed: ${result.removedPaths.join(", ")}`)
     logger.info("Completed plugin manager tool", {
-      tool: TOOL_IDS.clean,
+      tool: TOOL_IDS.prune,
       removedPaths: result.removedPaths.length,
       prunedIDs: result.prunedIDs.length,
     })
     return lines.join("\n")
   }
 
-  async function runInstallThenClean(context: ToolContext): Promise<string> {
+  async function runInstallThenPrune(context: ToolContext): Promise<string> {
     context.metadata({ title: "Syncing managed plugins" })
     logger.info("Running plugin manager tool", {
       tool: TOOL_IDS.sync,
@@ -257,11 +279,11 @@ export const PluginManager: Plugin = async (input) => {
     mergedConfig = await loadMergedConfig(input, logger)
     cache = resolveCacheContext(mergedConfig)
     const installOutput = await runInstallOrUpdateCore("install", mergedConfig, cache)
-    const cleanOutput = await runCleanCore(mergedConfig, cache)
+    const pruneOutput = await runPruneCore(mergedConfig, cache)
     logger.info("Completed plugin manager tool", {
       tool: TOOL_IDS.sync,
     })
-    return [installOutput, "", cleanOutput].join("\n")
+    return [installOutput, "", pruneOutput].join("\n")
   }
 
   function nextReloadOptions(reason: string) {

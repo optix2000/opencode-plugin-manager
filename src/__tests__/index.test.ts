@@ -9,7 +9,7 @@ const mockResolveCacheContext = mock()
 const mockReadLockfile = mock()
 const mockWriteLockfile = mock()
 const mockWithCacheLock = mock()
-const mockCleanCacheDirectories = mock()
+const mockPruneCacheDirectories = mock()
 
 const mockResolveCachedPluginPaths = mock()
 const mockSyncPlugins = mock()
@@ -31,7 +31,7 @@ mock.module("../index.deps", () => ({
   readLockfile: mockReadLockfile,
   writeLockfile: mockWriteLockfile,
   withCacheLock: mockWithCacheLock,
-  cleanCacheDirectories: mockCleanCacheDirectories,
+  pruneCacheDirectories: mockPruneCacheDirectories,
   resolveCachedPluginPaths: mockResolveCachedPluginPaths,
   syncPlugins: mockSyncPlugins,
   loadManagedPlugins: mockLoadManagedPlugins,
@@ -91,7 +91,7 @@ beforeEach(() => {
     mockReadLockfile,
     mockWriteLockfile,
     mockWithCacheLock,
-    mockCleanCacheDirectories,
+    mockPruneCacheDirectories,
     mockResolveCachedPluginPaths,
     mockSyncPlugins,
     mockLoadManagedPlugins,
@@ -110,7 +110,7 @@ beforeEach(() => {
   mockReadLockfile.mockResolvedValue(makeLockfile())
   mockWriteLockfile.mockResolvedValue(undefined)
   mockWithCacheLock.mockImplementation(async (_cache: unknown, fn: () => Promise<unknown>) => fn())
-  mockCleanCacheDirectories.mockResolvedValue({ removedPaths: [] })
+  mockPruneCacheDirectories.mockResolvedValue({ removedPaths: [] })
 
   mockResolveCachedPluginPaths.mockResolvedValue([])
   mockSyncPlugins.mockResolvedValue({
@@ -186,6 +186,110 @@ describe("PluginManager config hook", () => {
     await hooks.config({})
 
     expect(hasLogged("info", "[plugin-manager] No cached plugins loaded. Run tool: opm_install")).toBe(true)
+  })
+
+  test("suppresses 'no cached plugins' message when autoinstall is enabled", async () => {
+    mockLoadManagedPlugins.mockResolvedValue([])
+    mockLoadMergedConfig.mockResolvedValue(makeMergedConfig({ autoinstall: true }))
+    mockSyncPlugins.mockResolvedValue({
+      lockfile: makeLockfile(),
+      updated: [],
+      reused: [],
+      warnings: [],
+    })
+
+    const hooks = (await PluginManager(makePluginInput())) as any
+    await hooks.config({})
+
+    expect(hasLogged("info", "[plugin-manager] No cached plugins loaded. Run tool: opm_install")).toBe(false)
+  })
+})
+
+describe("autoinstall", () => {
+  test("runs install on startup when autoinstall is enabled", async () => {
+    const spec = makeSpec("npm", { id: "npm:auto", name: "auto-plugin" })
+    const mergedConfig = makeMergedConfig({ plugins: [spec], autoinstall: true })
+    const cache = makeCacheContext("/cache/auto")
+    const syncedLock = makeLockfile({
+      [spec.id]: makeLockEntry("npm", {
+        id: spec.id,
+        name: spec.name,
+        resolvedVersion: "1.0.0",
+        resolvedPath: "/cache/auto/npm/auto-plugin@1.0.0/index.js",
+      }),
+    })
+
+    mockLoadMergedConfig.mockResolvedValue(mergedConfig)
+    mockResolveCacheContext.mockReturnValue(cache)
+    mockSyncPlugins.mockResolvedValue({
+      lockfile: syncedLock,
+      updated: [`${spec.id} (install)`],
+      reused: [],
+      warnings: [],
+    })
+
+    await PluginManager(makePluginInput())
+
+    expect(mockSyncPlugins).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "install",
+        specs: mergedConfig.plugins,
+      }),
+    )
+    expect(mockWriteLockfile).toHaveBeenCalledWith(cache.lockfilePath, syncedLock)
+  })
+
+  test("does not run install on startup when autoinstall is not set", async () => {
+    mockLoadMergedConfig.mockResolvedValue(makeMergedConfig())
+
+    await PluginManager(makePluginInput())
+
+    expect(mockSyncPlugins).not.toHaveBeenCalled()
+  })
+
+  test("continues with cached plugins when autoinstall fails", async () => {
+    mockLoadMergedConfig.mockResolvedValue(makeMergedConfig({ autoinstall: true }))
+    mockWithCacheLock.mockRejectedValueOnce(new Error("network failure"))
+
+    const hooks = (await PluginManager(makePluginInput())) as any
+
+    expect(hooks.tool).toBeDefined()
+    expect(hasLogged("warn", "[plugin-manager] Autoinstall failed on startup: Error: network failure")).toBe(true)
+  })
+})
+
+describe("autoprune", () => {
+  test("runs prune on startup when autoprune is enabled", async () => {
+    const spec = makeSpec("npm", { id: "npm:auto", name: "auto-plugin" })
+    const mergedConfig = makeMergedConfig({ plugins: [spec], autoprune: true })
+    const cache = makeCacheContext("/cache/auto")
+
+    mockLoadMergedConfig.mockResolvedValue(mergedConfig)
+    mockResolveCacheContext.mockReturnValue(cache)
+    mockPruneCacheDirectories.mockResolvedValue({ removedPaths: [] })
+
+    await PluginManager(makePluginInput())
+
+    expect(mockPruneCacheDirectories).toHaveBeenCalledWith(cache, expect.anything(), expect.anything())
+    expect(mockWriteLockfile).toHaveBeenCalled()
+  })
+
+  test("does not run prune on startup when autoprune is not set", async () => {
+    mockLoadMergedConfig.mockResolvedValue(makeMergedConfig())
+
+    await PluginManager(makePluginInput())
+
+    expect(mockPruneCacheDirectories).not.toHaveBeenCalled()
+  })
+
+  test("continues with cached plugins when autoprune fails", async () => {
+    mockLoadMergedConfig.mockResolvedValue(makeMergedConfig({ autoprune: true }))
+    mockWithCacheLock.mockRejectedValueOnce(new Error("prune failure"))
+
+    const hooks = (await PluginManager(makePluginInput())) as any
+
+    expect(hooks.tool).toBeDefined()
+    expect(hasLogged("warn", "[plugin-manager] Autoprune failed on startup: Error: prune failure")).toBe(true)
   })
 })
 
@@ -313,7 +417,7 @@ describe("opm_update", () => {
   })
 })
 
-describe("opm_clean and pruneLockfile behavior", () => {
+describe("opm_prune and pruneLockfile behavior", () => {
   test("prunes unconfigured and missing entries, keeps existing configured entries, and reports cleanup", async () => {
     const keepSpec = makeSpec("npm", { id: "npm:keep", name: "keep-plugin" })
     const missingSpec = makeSpec("git", {
@@ -356,20 +460,20 @@ describe("opm_clean and pruneLockfile behavior", () => {
     mockResolveCacheContext.mockReturnValue(cache)
     mockReadLockfile.mockResolvedValue(currentLock)
     mockExists.mockImplementation(async (resolvedPath: string) => resolvedPath === keepEntry.resolvedPath)
-    mockCleanCacheDirectories.mockResolvedValue({
+    mockPruneCacheDirectories.mockResolvedValue({
       removedPaths: ["/cache/clean/local/stale", "/cache/clean/git/unused"],
     })
     mockResolveCachedPluginPaths.mockResolvedValue([keepEntry])
 
     const hooks = (await PluginManager(makePluginInput())) as any
     const context = makeToolContext()
-    const output = await hooks.tool["opm_clean"].execute({}, context)
+    const output = await hooks.tool["opm_prune"].execute({}, context)
 
-    expect(context.metadata).toHaveBeenCalledWith({ title: "Cleaning managed plugin cache" })
+    expect(context.metadata).toHaveBeenCalledWith({ title: "Pruning managed plugin cache" })
     expect(mockExists).toHaveBeenCalledWith(missingEntry.resolvedPath)
     expect(mockExists).toHaveBeenCalledWith(keepEntry.resolvedPath)
 
-    expect(mockCleanCacheDirectories).toHaveBeenCalledWith(cache, prunedLock, expect.anything())
+    expect(mockPruneCacheDirectories).toHaveBeenCalledWith(cache, prunedLock, expect.anything())
     expect(mockWriteLockfile).toHaveBeenCalledWith(cache.lockfilePath, prunedLock)
     expect(mockResolveCachedPluginPaths).toHaveBeenLastCalledWith(
       mergedConfig.plugins,
@@ -395,7 +499,7 @@ describe("opm_clean and pruneLockfile behavior", () => {
 })
 
 describe("opm_sync", () => {
-  test("runs install then clean sequentially and combines both outputs", async () => {
+  test("runs install then prune sequentially and combines both outputs", async () => {
     const spec = makeSpec("npm", { id: "npm:sync", name: "sync-plugin" })
     const mergedConfig = makeMergedConfig({ plugins: [spec] })
     const cache = makeCacheContext("/cache/sync")
@@ -422,8 +526,8 @@ describe("opm_sync", () => {
       }
     })
     mockExists.mockResolvedValue(true)
-    mockCleanCacheDirectories.mockImplementation(async () => {
-      callOrder.push("clean")
+    mockPruneCacheDirectories.mockImplementation(async () => {
+      callOrder.push("prune")
       return { removedPaths: ["/cache/sync/npm/orphan"] }
     })
     mockResolveCachedPluginPaths.mockResolvedValue([lockEntry])
@@ -432,7 +536,7 @@ describe("opm_sync", () => {
     const context = makeToolContext()
     const output = await hooks.tool["opm_sync"].execute({}, context)
 
-    expect(callOrder).toEqual(["install", "clean"])
+    expect(callOrder).toEqual(["install", "prune"])
     expect(context.metadata).toHaveBeenCalledTimes(1)
     expect(context.metadata).toHaveBeenCalledWith({ title: "Syncing managed plugins" })
     expect(mockLoadMergedConfig).toHaveBeenCalledTimes(2)

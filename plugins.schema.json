@@ -9,6 +9,16 @@
       "type": "string",
       "description": "Optional plugin cache directory. Defaults to ~/.cache/opencode/opm"
     },
+    "autoinstall": {
+      "type": "boolean",
+      "description": "Automatically run install on startup so new plugins are available without a manual tool call or restart",
+      "default": false
+    },
+    "autoprune": {
+      "type": "boolean",
+      "description": "Automatically prune stale cache directories on startup so removed plugins are cleaned up without a manual tool call or restart",
+      "default": false
+    },
     "plugins": {
       "type": "array",
       "default": [],

@@ -503,7 +503,7 @@ describe("isTrustedLockEntryPath", () => {
   })
 })
 
-describe("cleanCacheDirectories", () => {
+describe("pruneCacheDirectories", () => {
   test("removes orphan directories and preserves lockfile-referenced directories", async () => {
     const cacheContext = makeCacheContext("/cache")
     const keepEntry = makeLockEntry("npm", {
@@ -533,7 +533,7 @@ describe("cleanCacheDirectories", () => {
       return []
     })
 
-    const result = await cache.cleanCacheDirectories(cacheContext, lockfile)
+    const result = await cache.pruneCacheDirectories(cacheContext, lockfile)
 
     const removedNpmPath = path.resolve(path.join(cacheContext.rootDir, "npm", "orphan"))
     const removedGitPath = path.resolve(path.join(cacheContext.rootDir, "git", "stale-git"))
@@ -559,7 +559,7 @@ describe("cleanCacheDirectories", () => {
       ]
     })
 
-    const result = await cache.cleanCacheDirectories(cacheContext, EMPTY_LOCKFILE)
+    const result = await cache.pruneCacheDirectories(cacheContext, EMPTY_LOCKFILE)
 
     const removedNpmTempPath = path.resolve(path.join(cacheContext.rootDir, ".tmp-npm-123"))
     const removedGitTempPath = path.resolve(path.join(cacheContext.rootDir, ".tmp-git-456"))
@@ -575,7 +575,7 @@ describe("cleanCacheDirectories", () => {
     const cacheContext = makeCacheContext("/cache")
     mockExists.mockResolvedValue(false)
 
-    await expect(cache.cleanCacheDirectories(cacheContext, EMPTY_LOCKFILE)).resolves.toEqual({ removedPaths: [] })
+    await expect(cache.pruneCacheDirectories(cacheContext, EMPTY_LOCKFILE)).resolves.toEqual({ removedPaths: [] })
     expect(mockFsReaddir).not.toHaveBeenCalled()
     expect(mockFsRm).not.toHaveBeenCalled()
   })

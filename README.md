@@ -2,7 +2,7 @@
 
 A plugin manager for [opencode](https://opencode.ai). Manages plugins from npm, git repos, and local paths.
 
-Plugins are only installed/updated when you explicitly run a tool — nothing downloads on startup.
+By default, plugins are only installed/updated when you explicitly run a tool — nothing downloads on startup. Enable `autoinstall` and/or `autoprune` to change this.
 
 ## Features
 
@@ -87,6 +87,8 @@ Plugins can be a shorthand string or an object with more options.
 | Key | Required | Description |
 |-----|----------|-------------|
 | `cacheDir` | no | Where to store cached plugins (default: `~/.cache/opencode/opm`) |
+| `autoinstall` | no | Automatically install plugins on startup (default: `false`) |
+| `autoprune` | no | Automatically prune stale cache on startup (default: `false`) |
 | `plugins` | yes | Array of plugin entries |
 
 ## Tools
@@ -97,8 +99,8 @@ Run these from within opencode:
 |------|-------------|
 | `opm_install` | Install plugins from `plugins.json`, reusing locked versions |
 | `opm_update` | Update plugins to newest versions matching constraints |
-| `opm_clean` | Remove cached versions not referenced by current config |
-| `opm_sync` | Install + clean in one step |
+| `opm_prune` | Remove cached versions not referenced by current config |
+| `opm_sync` | Install + prune in one step |
 | `opm_self_update` | Check for a newer release of the plugin manager itself |
 
 Install/update writes `plugins.lock.json` in the cache directory and shows per-plugin state transitions.

@@ -74,12 +74,16 @@ export const PluginInputSchema = z.union([
 
 export const PluginsFileSchema = z.object({
   cacheDir: z.string().min(1).optional(),
+  autoinstall: z.boolean().optional(),
+  autoprune: z.boolean().optional(),
   plugins: z.array(PluginInputSchema),
 })
 
 /** Loose schema that validates file structure without validating individual plugin entries. */
 export const PluginsFileStructureSchema = z.object({
   cacheDir: z.string().min(1).optional(),
+  autoinstall: z.boolean().optional(),
+  autoprune: z.boolean().optional(),
   plugins: z.array(z.unknown()),
 })
 
