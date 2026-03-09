@@ -10,6 +10,13 @@ const LOCKFILE_NAME = "plugins.lock.json"
 const LOCK_MUTEX_NAME = ".manager.lock"
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000
 const DEFAULT_LOCK_RETRY_MS = 125
+const LOCK_STALE_AFTER_MS = 5 * 60_000
+
+type LockMetadata = {
+  pid: number
+  createdAt: number
+  host?: string
+}
 
 export type CacheContext = {
   rootDir: string
@@ -87,6 +94,14 @@ export async function withCacheLock<T>(
       logger.debug("Cache lock acquired", {
         mutexPath: cache.mutexPath,
       })
+
+      const lockMetadata: LockMetadata = {
+        pid: process.pid,
+        createdAt: Date.now(),
+        host: os.hostname(),
+      }
+      await fs.writeFile(cache.mutexPath, `${JSON.stringify(lockMetadata)}\n`, "utf8").catch(() => undefined)
+
       try {
         return await fn()
       } finally {
@@ -99,6 +114,11 @@ export async function withCacheLock<T>(
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
       if (code !== "EEXIST") throw error
+
+      if (await reclaimStaleLock(cache, logger)) {
+        continue
+      }
+
       if (Date.now() - start > timeoutMs) {
         logger.error("Timed out waiting for cache lock", {
           mutexPath: cache.mutexPath,
@@ -108,6 +128,81 @@ export async function withCacheLock<T>(
       }
       await sleep(DEFAULT_LOCK_RETRY_MS)
     }
+  }
+}
+
+async function reclaimStaleLock(cache: CacheContext, logger: Logger): Promise<boolean> {
+  const metadata = await readLockMetadata(cache.mutexPath)
+  if (metadata) {
+    if (isProcessAlive(metadata.pid)) {
+      return false
+    }
+
+    logger.warn("Reclaiming stale cache lock from dead process", {
+      mutexPath: cache.mutexPath,
+      pid: metadata.pid,
+      createdAt: metadata.createdAt,
+      host: metadata.host,
+    })
+    return await unlinkIfPresent(cache.mutexPath)
+  }
+
+  const stat = await fs.stat(cache.mutexPath).catch(() => undefined)
+  if (!stat || typeof stat.mtimeMs !== "number" || !Number.isFinite(stat.mtimeMs)) {
+    return false
+  }
+
+  const ageMs = Date.now() - stat.mtimeMs
+  if (ageMs < LOCK_STALE_AFTER_MS) {
+    return false
+  }
+
+  logger.warn("Reclaiming stale cache lock with unknown owner", {
+    mutexPath: cache.mutexPath,
+    ageMs,
+  })
+  return await unlinkIfPresent(cache.mutexPath)
+}
+
+async function readLockMetadata(mutexPath: string): Promise<LockMetadata | undefined> {
+  try {
+    const text = await fs.readFile(mutexPath, "utf8")
+    const parsed = JSON.parse(text) as Partial<LockMetadata>
+    const pid = parsed.pid
+    const createdAt = parsed.createdAt
+    if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return undefined
+    if (typeof createdAt !== "number" || !Number.isFinite(createdAt)) return undefined
+    return {
+      pid,
+      createdAt,
+      ...(typeof parsed.host === "string" ? { host: parsed.host } : {}),
+    }
+  } catch {
+    return undefined
+  }
+}
+
+function isProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  if (pid === process.pid) return true
+
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    return code !== "ESRCH"
+  }
+}
+
+async function unlinkIfPresent(targetPath: string): Promise<boolean> {
+  try {
+    await fs.unlink(targetPath)
+    return true
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === "ENOENT") return false
+    throw error
   }
 }
 

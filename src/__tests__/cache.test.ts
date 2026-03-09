@@ -285,6 +285,82 @@ describe("withCacheLock", () => {
     expect(fn).toHaveBeenCalledTimes(1)
   })
 
+  test("reclaims stale lock when owner pid is dead", async () => {
+    const cacheContext = makeCacheContext("/cache")
+    const close = mock().mockResolvedValue(undefined)
+    const lockBusyError = Object.assign(new Error("busy"), { code: "EEXIST" })
+    mockFsOpen.mockRejectedValueOnce(lockBusyError)
+    mockFsOpen.mockResolvedValueOnce({ close })
+    mockFsReadFile.mockResolvedValue(JSON.stringify({ pid: 999_999, createdAt: 1, host: "host" }))
+
+    const originalKill = process.kill
+    process.kill = mock((_pid: number, _signal?: number) => {
+      const error = Object.assign(new Error("missing"), { code: "ESRCH" })
+      throw error
+    }) as typeof process.kill
+
+    const fn = mock(async () => "done")
+
+    try {
+      const result = await cache.withCacheLock(cacheContext, fn, 1_000)
+      expect(result).toBe("done")
+      expect(mockFsUnlink).toHaveBeenCalledWith(cacheContext.mutexPath)
+      expect(mockSleep).not.toHaveBeenCalled()
+      expect(fn).toHaveBeenCalledTimes(1)
+    } finally {
+      process.kill = originalKill
+    }
+  })
+
+  test("reclaims stale lock by age when metadata is unreadable", async () => {
+    const cacheContext = makeCacheContext("/cache")
+    const close = mock().mockResolvedValue(undefined)
+    const lockBusyError = Object.assign(new Error("busy"), { code: "EEXIST" })
+    mockFsOpen.mockRejectedValueOnce(lockBusyError)
+    mockFsOpen.mockResolvedValueOnce({ close })
+    mockFsReadFile.mockResolvedValue("not-json")
+    mockFsStat.mockResolvedValue({ mtimeMs: 0 })
+
+    const originalNow = Date.now
+    Date.now = mock(() => 600_000) as typeof Date.now
+
+    const fn = mock(async () => "ok")
+
+    try {
+      const result = await cache.withCacheLock(cacheContext, fn, 1_000)
+      expect(result).toBe("ok")
+      expect(mockFsUnlink).toHaveBeenCalledWith(cacheContext.mutexPath)
+      expect(mockSleep).not.toHaveBeenCalled()
+      expect(fn).toHaveBeenCalledTimes(1)
+    } finally {
+      Date.now = originalNow
+    }
+  })
+
+  test("does not reclaim lock when owner pid is still alive", async () => {
+    const cacheContext = makeCacheContext("/cache")
+    const lockBusyError = Object.assign(new Error("busy"), { code: "EEXIST" })
+    mockFsOpen.mockRejectedValue(lockBusyError)
+    mockFsReadFile.mockResolvedValue(JSON.stringify({ pid: process.pid, createdAt: 1 }))
+
+    const originalNow = Date.now
+    const nowSpy = mock(() => {
+      const value = nowSpy.mock.calls.length
+      return value === 1 ? 0 : 31
+    })
+    Date.now = nowSpy as typeof Date.now
+
+    try {
+      await expect(cache.withCacheLock(cacheContext, async () => "never", 30)).rejects.toThrow(
+        `Timed out waiting for cache lock: ${cacheContext.mutexPath}`,
+      )
+      expect(mockFsUnlink).not.toHaveBeenCalled()
+      expect(mockSleep).not.toHaveBeenCalled()
+    } finally {
+      Date.now = originalNow
+    }
+  })
+
   test("throws timeout error when lock remains busy", async () => {
     const cacheContext = makeCacheContext("/cache")
     const lockBusyError = Object.assign(new Error("busy"), { code: "EEXIST" })
