@@ -23,9 +23,11 @@ export const BuildSchema = z.object({
   timeout: z.number().int().positive().max(300_000).default(BUILD_COMMAND_TIMEOUT_MS),
 }).strict()
 
+const NPM_PACKAGE_NAME_REGEX = /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/
+
 const NpmPluginSchema = z.object({
   source: z.literal("npm"),
-  name: z.string().min(1),
+  name: z.string().min(1).regex(NPM_PACKAGE_NAME_REGEX),
   version: z.string().min(1).optional(),
   entry: z.string().min(1).optional(),
 }).strict()

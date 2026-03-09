@@ -268,6 +268,51 @@ describe("loadMergedConfig", () => {
     }
   })
 
+  test("accepts npm object plugins with valid package names", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON])
+    setConfigFiles({
+      [GLOBAL_CONFIG_JSON]: {
+        plugins: [{ source: "npm", name: "@scope/pkg.name_foo~bar-1", version: "1.0" }],
+      },
+    })
+
+    const result = await loadMergedConfig(input("/repo", "/repo/subdir"))
+    expect(result.plugins).toHaveLength(1)
+    expect(result.plugins[0]).toMatchObject({
+      id: "npm:@scope/pkg.name_foo~bar-1",
+      source: "npm",
+      name: "@scope/pkg.name_foo~bar-1",
+      version: "1.0",
+      fromFile: path.resolve(GLOBAL_CONFIG_JSON),
+    })
+  })
+
+  test("rejects npm object plugins with invalid package names", async () => {
+    const invalidNames = ["foo bar", "@./bad", "name$bad"]
+
+    for (const invalidName of invalidNames) {
+      setExistingFiles([GLOBAL_CONFIG_JSON])
+      setConfigFiles({
+        [GLOBAL_CONFIG_JSON]: {
+          plugins: [{ source: "npm", name: invalidName }],
+        },
+      })
+
+      const originalWarn = console.warn
+      const warn = mock((..._args: unknown[]) => undefined)
+      console.warn = warn as typeof console.warn
+
+      try {
+        const result = await loadMergedConfig(input("/repo", "/repo/subdir"))
+        expect(result.plugins).toEqual([])
+        expect(warn).toHaveBeenCalledTimes(1)
+        expect(String(warn.mock.calls[0]?.[0])).toContain(`Invalid config at ${path.resolve(GLOBAL_CONFIG_JSON)}`)
+      } finally {
+        console.warn = originalWarn
+      }
+    }
+  })
+
   test("uses cacheDir from the last parsed global file", async () => {
     setExistingFiles([GLOBAL_CONFIG_JSON, GLOBAL_CONFIG_JSONC])
     setConfigFiles({
