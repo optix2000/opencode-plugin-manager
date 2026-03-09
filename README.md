@@ -1,8 +1,15 @@
 # opencode-plugin-manager
 
-`opencode-plugin-manager` is an opencode meta-plugin that manages plugin sources from npm, git repositories, and local paths.
+A plugin manager for [opencode](https://opencode.ai). Manages plugins from npm, git repos, and local paths.
 
-It does not auto-download on startup. You explicitly run `opm_sync` to install/update plugins, and startup loads from locked plugin paths.
+Plugins are only installed/updated when you explicitly run a tool — nothing downloads on startup.
+
+## Features
+
+- npm, git, and local plugin sources
+- Version pinning and lock file
+- Automatic bundling and install scripts when configured
+- Hot reload on tool-triggered refreshes (with [limitations](#limitations))
 
 ## Install
 
@@ -14,18 +21,18 @@ Add the plugin manager to your opencode config:
 }
 ```
 
-For local testing without publishing to npm:
+For local development:
 
 ```sh
 bun run bundle
 cp dist/plugin-manager.js ~/.config/opencode/plugins/plugin-manager.js
 ```
 
-OpenCode autoloads `.js` files from `~/.config/opencode/plugins/`, so no `opencode.json` plugin entry is needed for this local test flow.
+OpenCode autoloads `.js` files from `~/.config/opencode/plugins/`.
 
-## Configure plugins
+## Configuration
 
-Create `plugins.json` (or `plugins.jsonc`) in your global opencode config directory (`~/.config/opencode`):
+Create `plugins.json` (or `plugins.jsonc`) in `~/.config/opencode/`:
 
 ```jsonc
 {
@@ -52,66 +59,54 @@ Create `plugins.json` (or `plugins.jsonc`) in your global opencode config direct
 }
 ```
 
-## Install and update flow
+### Plugin entries
 
-Run tools from opencode:
+Plugins can be a shorthand string or an object with more options.
 
-- `opm_install` installs plugins from `plugins.json` and reuses compatible locked versions.
-- `opm_update` refreshes plugins to the newest versions matching configured constraints.
-- `opm_clean` removes cached plugin directories and lock entries that are no longer referenced.
-- `opm_sync` runs install and then clean.
-- `opm_self_update` checks npm for a newer `opencode-plugin-manager` release and tells you what to pin in `opencode.json`.
+**String shorthands:**
 
-Install/update writes `plugins.lock.json` in the configured cache directory.
-Install/update output also includes per-plugin state transitions (`before -> after`) with resolved versions/commits.
+- `"my-plugin@1.2.3"` — npm package with optional version constraint
+- `"./path/to/plugin"` — local path (relative, absolute, or `~/`)
 
-## Slash command templates
+**Object keys:**
 
-opencode slash commands are prompt templates, so add command entries that call these tools:
+| Key | Sources | Required | Description |
+|-----|---------|----------|-------------|
+| `source` | all | yes | `"npm"`, `"git"`, or `"local"` |
+| `name` | npm | yes | npm package name |
+| `version` | npm | no | semver range (default: `"latest"`) |
+| `repo` | git | yes | git clone URL |
+| `ref` | git | no | branch, tag, or commit to checkout |
+| `path` | local | yes | path to plugin directory |
+| `entry` | all | no | entry file override (default: auto-detected `opencode.plugin.ts`) |
+| `build.command` | git, local | no | shell command to run after clone/checkout |
+| `build.timeout` | git, local | no | build timeout in ms (max 300000) |
 
-```jsonc
-{
-  "command": {
-    "opm-install": {
-      "description": "Install managed plugins",
-      "template": "Run the opm_install tool to install managed plugins from plugins.json."
-    },
-    "opm-update": {
-      "description": "Update managed plugins",
-      "template": "Run the opm_update tool to update managed plugins to the highest versions that match constraints."
-    },
-    "opm-clean": {
-      "description": "Clean stale managed plugin cache",
-      "template": "Run the opm_clean tool to remove stale managed plugin cache entries and prune lock entries."
-    },
-    "opm-sync": {
-      "description": "Install then clean managed plugins",
-      "template": "Run the opm_sync tool to install managed plugins and then clean stale cache entries."
-    },
-    "opm-self-update": {
-      "description": "Check plugin-manager updates",
-      "template": "Run the opm_self_update tool and report whether an update is available."
-    }
-  }
-}
-```
+### Top-level keys
 
-Then use `/opm-install`, `/opm-update`, `/opm-clean`, `/opm-sync`, and `/opm-self-update`.
+| Key | Required | Description |
+|-----|----------|-------------|
+| `cacheDir` | no | Where to store cached plugins (default: `~/.cache/opencode/opm`) |
+| `plugins` | yes | Array of plugin entries |
 
-This repo also includes starter templates in `commands/` that you can copy into `.opencode/commands/`.
+## Tools
 
-## Behavior
+Run these from within opencode:
 
-- Startup loads plugins from locked paths (cached installs and local paths).
-- Managed plugin reloads only happen on startup or when `opm_install`, `opm_update`, `opm_clean`, or `opm_sync` are run.
-- Only global config is loaded from `~/.config/opencode/plugins.json` or `~/.config/opencode/plugins.jsonc`.
-- Failed plugin sync/load logs a warning and continues.
-- Build commands are never auto-run; they only run when explicitly set with `build.command`.
-- If `entry` is configured, it takes precedence. Otherwise, `opencode.plugin.ts` is used automatically when present.
-- Tool/auth collisions are last-write-wins with warnings.
+| Tool | Description |
+|------|-------------|
+| `opm_install` | Install plugins from `plugins.json`, reusing locked versions |
+| `opm_update` | Update plugins to newest versions matching constraints |
+| `opm_clean` | Remove cached versions not referenced by current config |
+| `opm_sync` | Install + clean in one step |
+| `opm_self_update` | Check for a newer release of the plugin manager itself |
 
-## Reload limitations
+Install/update writes `plugins.lock.json` in the cache directory and shows per-plugin state transitions.
 
-- Reloading only happens on startup or when `opm_install`, `opm_update`, `opm_clean`, or `opm_sync` run.
-- Managed hook code reloads on those tool-triggered refreshes, but opencode caches some state per instance.
-- Changes to tool registration or auth-provider behavior may require restarting opencode before they fully take effect.
+## Limitations
+
+- Only reads global config (`~/.config/opencode/plugins.json`) — no per-project plugin configs.
+- If multiple plugins register the same tool or auth provider, last-write-wins.
+- Hook code reloads on tool-triggered refreshes, but opencode caches some state per instance.
+- Changes to tool registration or auth-provider behavior may require restarting opencode.
+- OpenCode doesn't support slash commands from plugins, so you need to register them yourself. Starter templates are included in `commands/` — copy them into `.opencode/commands/` to get `/opm-install`, `/opm-update`, etc.
