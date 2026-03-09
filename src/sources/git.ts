@@ -15,6 +15,7 @@ import {
 
 type GitSpec = Extract<ManagedPluginSpec, { source: "git" }>
 const GIT_NETWORK_TIMEOUT_MS = 180_000
+const GIT_DEPS_INSTALL_TIMEOUT_MS = 180_000
 
 export async function syncGitPlugin(
   spec: GitSpec,
@@ -88,9 +89,23 @@ export async function syncGitPlugin(
 
     const commit = (await runCommand({
       command: "git",
-      args: ["-C", cloneDir, "rev-parse", "--end-of-options", "HEAD"],
+      args: ["-C", cloneDir, "rev-parse", "--verify", "HEAD"],
       logger,
     })).stdout.trim()
+
+    const packageJsonPath = path.join(cloneDir, "package.json")
+    if (await exists(packageJsonPath)) {
+      logger.info("Installing git plugin dependencies", {
+        pluginID: spec.id,
+      })
+      await runCommand({
+        command: "bun",
+        args: ["install", "--ignore-scripts"],
+        cwd: cloneDir,
+        timeout: GIT_DEPS_INSTALL_TIMEOUT_MS,
+        logger,
+      })
+    }
 
     if (spec.build) {
       await runCommand({

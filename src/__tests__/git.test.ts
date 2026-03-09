@@ -101,6 +101,9 @@ describe("syncGitPlugin", () => {
     const cloneDir = path.join(TEMP_DIR, "repo")
 
     mockRunCommand.mockImplementation(async ({ command, args }: RunCommandInput) => {
+      if (command === "bun") {
+        return { stdout: "", stderr: "" }
+      }
       expect(command).toBe("git")
 
       if (args.includes("clone")) {
@@ -117,7 +120,7 @@ describe("syncGitPlugin", () => {
     const runCalls = getRunCalls()
 
     expect(mockFsMkdtemp).toHaveBeenCalledWith(path.join(cache.rootDir, ".tmp-git-"))
-    expect(runCalls).toHaveLength(2)
+    expect(runCalls).toHaveLength(3)
     expect(runCalls[0]).toEqual({
       command: "git",
       args: ["-c", "core.hooksPath=/dev/null", "clone", "--depth", "1", spec.repo, cloneDir],
@@ -126,7 +129,7 @@ describe("syncGitPlugin", () => {
     })
     expect(runCalls[1]).toEqual({
       command: "git",
-      args: ["-C", cloneDir, "rev-parse", "--end-of-options", "HEAD"],
+      args: ["-C", cloneDir, "rev-parse", "--verify", "HEAD"],
       logger: TEST_LOGGER,
     })
 
@@ -171,6 +174,7 @@ describe("syncGitPlugin", () => {
       if (args.includes("fetch")) return { stdout: "", stderr: "" }
       if (args.includes("checkout")) return { stdout: "", stderr: "" }
       if (args.includes("rev-parse")) return { stdout: `${COMMIT}\n`, stderr: "" }
+      if (args.includes("install")) return { stdout: "", stderr: "" }
       throw new Error(`Unexpected args: ${args.join(" ")}`)
     })
 
@@ -218,6 +222,7 @@ describe("syncGitPlugin", () => {
       if (args.includes("--unshallow")) return { stdout: "", stderr: "" }
       if (args.includes("checkout")) return { stdout: "", stderr: "" }
       if (args.includes("rev-parse")) return { stdout: `${COMMIT}\n`, stderr: "" }
+      if (args.includes("install")) return { stdout: "", stderr: "" }
       throw new Error(`Unexpected args: ${args.join(" ")}`)
     })
 
@@ -253,6 +258,7 @@ describe("syncGitPlugin", () => {
     mockRunCommand.mockImplementation(async ({ args }: RunCommandInput) => {
       if (args.includes("clone")) return { stdout: "", stderr: "" }
       if (args.includes("rev-parse")) return { stdout: `${COMMIT}\n`, stderr: "" }
+      if (args.includes("install")) return { stdout: "", stderr: "" }
       throw new Error(`Unexpected args: ${args.join(" ")}`)
     })
 
@@ -284,6 +290,7 @@ describe("syncGitPlugin", () => {
     mockRunCommand.mockImplementation(async ({ command, args }: RunCommandInput) => {
       if (command === "git" && args.includes("clone")) return { stdout: "", stderr: "" }
       if (command === "git" && args.includes("rev-parse")) return { stdout: `${COMMIT}\n`, stderr: "" }
+      if (command === "bun") return { stdout: "", stderr: "" }
       if (command === "sh") return { stdout: "", stderr: "" }
       throw new Error(`Unexpected command: ${command} ${args.join(" ")}`)
     })
@@ -299,6 +306,105 @@ describe("syncGitPlugin", () => {
       timeout: spec.build!.timeout,
       logger: TEST_LOGGER,
     })
+  })
+
+  test("runs bun install when package.json exists in clone directory", async () => {
+    const cache = makeCacheContext(CACHE_ROOT)
+    const spec = makeGitSpec()
+    const cloneDir = path.join(TEMP_DIR, "repo")
+
+    mockRunCommand.mockImplementation(async ({ command, args }: RunCommandInput) => {
+      if (command === "git" && args.includes("clone")) return { stdout: "", stderr: "" }
+      if (command === "git" && args.includes("rev-parse")) return { stdout: `${COMMIT}\n`, stderr: "" }
+      if (command === "bun") return { stdout: "", stderr: "" }
+      throw new Error(`Unexpected command: ${command} ${args.join(" ")}`)
+    })
+
+    await syncGitPlugin(spec, cache, {}, TEST_LOGGER)
+    const runCalls = getRunCalls()
+
+    const bunCalls = runCalls.filter((call) => call.command === "bun")
+    expect(bunCalls).toHaveLength(1)
+    expect(bunCalls[0]).toEqual({
+      command: "bun",
+      args: ["install", "--ignore-scripts"],
+      cwd: cloneDir,
+      timeout: expect.any(Number),
+      logger: TEST_LOGGER,
+    })
+  })
+
+  test("skips bun install when no package.json exists in clone directory", async () => {
+    const cache = makeCacheContext(CACHE_ROOT)
+    const spec = makeGitSpec()
+
+    mockExists.mockImplementation(async (p: string) => {
+      if (p.endsWith("package.json")) return false
+      return true
+    })
+
+    mockRunCommand.mockImplementation(async ({ command, args }: RunCommandInput) => {
+      if (command === "git" && args.includes("clone")) return { stdout: "", stderr: "" }
+      if (command === "git" && args.includes("rev-parse")) return { stdout: `${COMMIT}\n`, stderr: "" }
+      throw new Error(`Unexpected command: ${command} ${args.join(" ")}`)
+    })
+
+    await syncGitPlugin(spec, cache, {}, TEST_LOGGER)
+    const runCalls = getRunCalls()
+
+    const bunCalls = runCalls.filter((call) => call.command === "bun")
+    expect(bunCalls).toHaveLength(0)
+  })
+
+  test("runs bun install before build command", async () => {
+    const cache = makeCacheContext(CACHE_ROOT)
+    const spec = makeGitSpec({
+      build: {
+        command: "npm run build",
+        timeout: 45_000,
+      },
+    })
+    const cloneDir = path.join(TEMP_DIR, "repo")
+    const callOrder: string[] = []
+
+    mockRunCommand.mockImplementation(async ({ command, args }: RunCommandInput) => {
+      if (command === "git" && args.includes("clone")) return { stdout: "", stderr: "" }
+      if (command === "git" && args.includes("rev-parse")) return { stdout: `${COMMIT}\n`, stderr: "" }
+      if (command === "bun") {
+        callOrder.push("bun-install")
+        return { stdout: "", stderr: "" }
+      }
+      if (command === "sh") {
+        callOrder.push("build")
+        return { stdout: "", stderr: "" }
+      }
+      throw new Error(`Unexpected command: ${command} ${args.join(" ")}`)
+    })
+
+    await syncGitPlugin(spec, cache, {}, TEST_LOGGER)
+
+    expect(callOrder).toEqual(["bun-install", "build"])
+  })
+
+  test("propagates bun install error and still cleans temp directory", async () => {
+    const cache = makeCacheContext(CACHE_ROOT)
+    const spec = makeGitSpec()
+    const installError = new Error("bun install failed")
+
+    mockRunCommand.mockImplementation(async ({ command, args }: RunCommandInput) => {
+      if (command === "git" && args.includes("clone")) return { stdout: "", stderr: "" }
+      if (command === "git" && args.includes("rev-parse")) return { stdout: `${COMMIT}\n`, stderr: "" }
+      if (command === "bun") throw installError
+      throw new Error(`Unexpected command: ${command} ${args.join(" ")}`)
+    })
+
+    await expect(syncGitPlugin(spec, cache, {}, TEST_LOGGER)).rejects.toBe(installError)
+
+    expect(mockEnsureDir).not.toHaveBeenCalled()
+    expect(mockMoveExtractedDirIntoPlace).not.toHaveBeenCalled()
+
+    expect(mockExists).toHaveBeenCalledWith(TEMP_DIR)
+    expect(mockFsRm).toHaveBeenCalledWith(TEMP_DIR, { recursive: true, force: true })
   })
 
   test("propagates clone error and still cleans temp directory", async () => {
