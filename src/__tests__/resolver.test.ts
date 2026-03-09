@@ -602,7 +602,12 @@ describe("resolveCachedPluginPaths", () => {
       const result = await resolveCachedPluginPaths([spec], lockfileWith(spec, entry), cache)
 
       expect(result).toEqual([])
-      expect(warnSpy).toHaveBeenCalledWith(`[plugin-manager] Ignoring incompatible lock entry for ${spec.id}`)
+      expect(warnSpy).toHaveBeenCalledWith(
+        `[plugin-manager] Ignoring incompatible lock entry for ${spec.id}`,
+        expect.objectContaining({
+          pluginID: spec.id,
+        }),
+      )
       expect(mockExists).not.toHaveBeenCalled()
       expect(mockIsTrustedLockEntryPath).not.toHaveBeenCalled()
     } finally {
@@ -631,7 +636,13 @@ describe("resolveCachedPluginPaths", () => {
       const result = await resolveCachedPluginPaths([spec], lockfileWith(spec, entry), cache)
 
       expect(result).toEqual([])
-      expect(warnSpy).toHaveBeenCalledWith(`[plugin-manager] Cached plugin missing on disk: ${spec.id}`)
+      expect(warnSpy).toHaveBeenCalledWith(
+        `[plugin-manager] Cached plugin missing on disk: ${spec.id}`,
+        expect.objectContaining({
+          pluginID: spec.id,
+          resolvedPath: entry.resolvedPath,
+        }),
+      )
       expect(mockIsTrustedLockEntryPath).not.toHaveBeenCalled()
     } finally {
       console.warn = originalWarn
@@ -662,6 +673,10 @@ describe("resolveCachedPluginPaths", () => {
       expect(result).toEqual([])
       expect(warnSpy).toHaveBeenCalledWith(
         `[plugin-manager] Ignoring untrusted lock path for ${spec.id}: ${entry.resolvedPath}`,
+        expect.objectContaining({
+          pluginID: spec.id,
+          resolvedPath: entry.resolvedPath,
+        }),
       )
       expect(mockIsTrustedLockEntryPath).toHaveBeenCalledWith(cache, entry)
     } finally {

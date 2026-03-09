@@ -197,7 +197,12 @@ describe("readLockfile", () => {
 
     try {
       await expect(cache.readLockfile("/cache/plugins.lock.json")).resolves.toEqual(EMPTY_LOCKFILE)
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to read lockfile"))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to read lockfile"),
+        expect.objectContaining({
+          lockfilePath: "/cache/plugins.lock.json",
+        }),
+      )
     } finally {
       console.warn = originalWarn
     }
@@ -221,7 +226,12 @@ describe("readLockfile", () => {
 
     try {
       await expect(cache.readLockfile("/cache/plugins.lock.json")).resolves.toEqual(EMPTY_LOCKFILE)
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Invalid lockfile"))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Invalid lockfile"),
+        expect.objectContaining({
+          lockfilePath: "/cache/plugins.lock.json",
+        }),
+      )
     } finally {
       console.warn = originalWarn
     }

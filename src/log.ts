@@ -33,18 +33,39 @@ export function createNoopLogger(): Logger {
 
 export function createConsoleLogger(prefix = ""): Logger {
   const format = (message: string) => (prefix ? `${prefix} ${message}` : message)
+  const hasExtra = (extra?: LogExtra) => extra !== undefined && Object.keys(extra).length > 0
 
   return {
-    debug: (message) => {
+    debug: (message, extra) => {
+      if (hasExtra(extra)) {
+        console.debug(format(message), extra)
+        return
+      }
+
       console.debug(format(message))
     },
-    info: (message) => {
+    info: (message, extra) => {
+      if (hasExtra(extra)) {
+        console.info(format(message), extra)
+        return
+      }
+
       console.info(format(message))
     },
-    warn: (message) => {
+    warn: (message, extra) => {
+      if (hasExtra(extra)) {
+        console.warn(format(message), extra)
+        return
+      }
+
       console.warn(format(message))
     },
-    error: (message) => {
+    error: (message, extra) => {
+      if (hasExtra(extra)) {
+        console.error(format(message), extra)
+        return
+      }
+
       console.error(format(message))
     },
   }
