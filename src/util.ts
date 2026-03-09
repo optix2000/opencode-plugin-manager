@@ -6,6 +6,8 @@ import path from "node:path"
 import { parse as parseJsonc } from "jsonc-parser"
 import type { Logger } from "./log"
 
+const COMMAND_KILL_GRACE_MS = 250
+
 export async function exists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath)
@@ -88,6 +90,8 @@ export async function runCommand(input: {
 
     let stdout = ""
     let stderr = ""
+    let timedOut = false
+    let settled = false
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString()
     })
@@ -96,23 +100,45 @@ export async function runCommand(input: {
     })
 
     let timer: NodeJS.Timeout | undefined
+    let killTimer: NodeJS.Timeout | undefined
     if (timeout) {
       timer = setTimeout(() => {
+        timedOut = true
         logger?.warn("Command timeout reached; sending SIGTERM", {
           commandString,
           timeout,
           cwd: cwd ?? process.cwd(),
         })
         child.kill("SIGTERM")
+
+        killTimer = setTimeout(() => {
+          if (settled) return
+          logger?.warn("Command did not exit after SIGTERM; sending SIGKILL", {
+            commandString,
+            timeout,
+            cwd: cwd ?? process.cwd(),
+          })
+          child.kill("SIGKILL")
+        }, COMMAND_KILL_GRACE_MS)
       }, timeout)
     }
 
-    child.on("error", reject)
-    child.on("close", (code) => {
+    child.on("error", (error) => {
+      if (settled) return
+      settled = true
       if (timer) clearTimeout(timer)
+      if (killTimer) clearTimeout(killTimer)
+      reject(error)
+    })
+
+    child.on("close", (code) => {
+      if (settled) return
+      settled = true
+      if (timer) clearTimeout(timer)
+      if (killTimer) clearTimeout(killTimer)
       const durationMs = Date.now() - startedAt
 
-      if (code === 0) {
+      if (code === 0 && !timedOut) {
         logger?.debug("Command completed", {
           command,
           args,
@@ -123,6 +149,11 @@ export async function runCommand(input: {
           stderr: stderr.trim() || undefined,
         })
         return resolve({ stdout, stderr })
+      }
+
+      if (timedOut) {
+        reject(new Error(`${command} ${args.join(" ")} timed out after ${timeout}ms: ${stderr || stdout}`))
+        return
       }
 
       logger?.error("Command failed", {

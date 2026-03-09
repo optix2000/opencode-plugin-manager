@@ -197,7 +197,33 @@ describe("runCommand", () => {
     const promise = runCommand({ command: "sleep", args: ["999"], timeout: 1 })
 
     // The timeout of 1ms should fire quickly and kill the process
-    await expect(promise).rejects.toThrow()
+    await expect(promise).rejects.toThrow("timed out after 1ms")
     expect(proc.kill).toHaveBeenCalledWith("SIGTERM")
+  })
+
+  test("escalates to SIGKILL when process ignores SIGTERM", async () => {
+    const eventListeners: Record<string, ((...args: unknown[]) => void)[]> = {}
+    const proc = {
+      stdout: { on: mock() },
+      stderr: { on: mock() },
+      on: mock((event: string, cb: (...args: unknown[]) => void) => {
+        if (!eventListeners[event]) eventListeners[event] = []
+        eventListeners[event].push(cb)
+      }),
+      kill: mock((signal: string) => {
+        if (signal === "SIGKILL") {
+          queueMicrotask(() => {
+            for (const cb of eventListeners.close ?? []) cb(null)
+          })
+        }
+      }),
+    }
+    mockSpawn.mockReturnValue(proc)
+
+    const promise = runCommand({ command: "sleep", args: ["999"], timeout: 1 })
+
+    await expect(promise).rejects.toThrow("timed out after 1ms")
+    expect(proc.kill).toHaveBeenCalledWith("SIGTERM")
+    expect(proc.kill).toHaveBeenCalledWith("SIGKILL")
   })
 })
