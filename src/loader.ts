@@ -1,3 +1,5 @@
+import * as fs from "node:fs/promises"
+import path from "node:path"
 import type { Hooks, Plugin as PluginFactory, PluginInput } from "@opencode-ai/plugin"
 import { pathToFileURL } from "node:url"
 import type { CacheContext } from "./cache"
@@ -5,6 +7,9 @@ import { createConsoleLogger, type Logger } from "./log"
 import { isTrustedLockEntryPath, sha256File } from "./loader.deps"
 import type { LockEntry } from "./types"
 import { sanitizeToolName } from "./util"
+
+const LOCAL_RELOAD_COPY_MARKER = ".opm-reload-"
+const localReloadCopyByPluginID = new Map<string, string>()
 
 type LoadedPlugin = {
   id: string
@@ -67,7 +72,7 @@ export async function loadManagedPlugins(
         }
       }
 
-      const moduleUrl = moduleUrlForEntry(entry, options)
+      const moduleUrl = await moduleUrlForEntry(entry, options, logger)
       logger.debug("Loading managed plugin module", {
         pluginID: entry.id,
         moduleUrl,
@@ -117,13 +122,78 @@ export async function loadManagedPlugins(
   return loaded
 }
 
-function moduleUrlForEntry(entry: LockEntry, options: LoadManagedPluginsOptions): string {
+async function moduleUrlForEntry(
+  entry: LockEntry,
+  options: LoadManagedPluginsOptions,
+  logger: Logger,
+): Promise<string> {
   const baseUrl = pathToFileURL(entry.resolvedPath).href
   if (!options.cacheBustLocal || entry.source !== "local") return baseUrl
 
   const token = options.cacheBustToken ?? String(Date.now())
+  const reloadedPath = await createLocalReloadCopy(entry, token, logger)
+  if (reloadedPath) return pathToFileURL(reloadedPath).href
+
+  // Bun currently has no documented runtime API to invalidate the ESM module cache.
+  // If creating a temporary on-disk copy fails (for example, a read-only plugin path),
+  // we fall back to query-string cache busting. This relies on Bun treating
+  // `file:///.../plugin.js?opm_reload=...` as a distinct module cache key.
+  // If Bun ever changes this behavior, replace this fallback by importing from a
+  // unique on-disk module path that preserves relative import resolution.
   const separator = baseUrl.includes("?") ? "&" : "?"
   return `${baseUrl}${separator}opm_reload=${encodeURIComponent(token)}`
+}
+
+async function createLocalReloadCopy(entry: LockEntry, token: string, logger: Logger): Promise<string | undefined> {
+  const destinationPath = localReloadCopyPath(entry.resolvedPath, token)
+  try {
+    await fs.copyFile(entry.resolvedPath, destinationPath)
+  } catch (error) {
+    logger.warn(`[plugin-manager] Failed to create local reload copy for ${entry.id}: ${String(error)}`, {
+      pluginID: entry.id,
+      resolvedPath: entry.resolvedPath,
+      destinationPath,
+      error: String(error),
+    })
+    return undefined
+  }
+
+  const previousCopyPath = localReloadCopyByPluginID.get(entry.id)
+  localReloadCopyByPluginID.set(entry.id, destinationPath)
+
+  if (previousCopyPath && previousCopyPath !== destinationPath) {
+    await fs.unlink(previousCopyPath).catch(() => undefined)
+  }
+
+  await cleanupStaleLocalReloadCopies(entry.resolvedPath, destinationPath)
+  return destinationPath
+}
+
+function localReloadCopyPath(resolvedPath: string, token: string): string {
+  const parsed = path.parse(resolvedPath)
+  const safeToken = sanitizeReloadToken(token)
+  return path.join(parsed.dir, `${parsed.name}${LOCAL_RELOAD_COPY_MARKER}${safeToken}${parsed.ext}`)
+}
+
+async function cleanupStaleLocalReloadCopies(resolvedPath: string, keepPath: string): Promise<void> {
+  const parsed = path.parse(resolvedPath)
+  const prefix = `${parsed.name}${LOCAL_RELOAD_COPY_MARKER}`
+  const siblings = await fs.readdir(parsed.dir, { withFileTypes: true }).catch(() => [])
+
+  for (const sibling of siblings) {
+    if (!sibling.isFile()) continue
+    if (!sibling.name.startsWith(prefix)) continue
+    if (parsed.ext && !sibling.name.endsWith(parsed.ext)) continue
+
+    const siblingPath = path.join(parsed.dir, sibling.name)
+    if (siblingPath === keepPath) continue
+    await fs.unlink(siblingPath).catch(() => undefined)
+  }
+}
+
+function sanitizeReloadToken(token: string): string {
+  const safe = token.replace(/[^a-zA-Z0-9._-]/g, "_")
+  return safe || String(Date.now())
 }
 
 export type MergedManagedHooks = {

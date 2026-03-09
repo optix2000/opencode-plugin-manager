@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import { makeCacheContext, makeLockEntry } from "./helpers"
 
 const mockIsTrustedLockEntryPath = mock()
@@ -337,5 +340,78 @@ describe("loadManagedPlugins", () => {
     expect(warningMessages().some((message) => message.includes("Failed to load npm:first"))).toBe(true)
     expect(warningMessages().some((message) => message.includes("Skipping untrusted plugin path for npm:skip"))).toBe(true)
     expect(warningMessages().some((message) => message.includes("Failed to load npm:second"))).toBe(true)
+  })
+
+  test("creates a temporary local copy for cache busting and cleans older copies", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "opm-loader-reload-"))
+    const pluginPath = path.join(tempDir, "plugin.js")
+    const depPath = path.join(tempDir, "dep.js")
+    const cache = makeCacheContext("/cache")
+
+    try {
+      await fs.writeFile(depPath, 'export const value = "dep"\n', "utf8")
+      await fs.writeFile(
+        pluginPath,
+        [
+          'import { value } from "./dep.js"',
+          "export default async function plugin() {",
+          "  return {",
+          "    event: async (input) => {",
+          '      input.seen = `v1-${value}`',
+          "    },",
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+
+      const entry = makeLockEntry("local", {
+        id: "local:reload-copy",
+        path: tempDir,
+        resolvedPath: pluginPath,
+      })
+
+      const firstLoad = await loadManagedPlugins([entry], {} as any, cache, undefined, {
+        cacheBustLocal: true,
+        cacheBustToken: "first",
+      })
+      const firstInput: { seen?: string } = {}
+      await firstLoad[0]?.hooks.event?.(firstInput as any)
+      expect(firstInput.seen).toBe("v1-dep")
+
+      const firstCopies = (await fs.readdir(tempDir)).filter((name) => name.includes(".opm-reload-"))
+      expect(firstCopies).toHaveLength(1)
+
+      await fs.writeFile(
+        pluginPath,
+        [
+          'import { value } from "./dep.js"',
+          "export default async function plugin() {",
+          "  return {",
+          "    event: async (input) => {",
+          '      input.seen = `v2-${value}`',
+          "    },",
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+
+      const secondLoad = await loadManagedPlugins([entry], {} as any, cache, undefined, {
+        cacheBustLocal: true,
+        cacheBustToken: "second",
+      })
+      const secondInput: { seen?: string } = {}
+      await secondLoad[0]?.hooks.event?.(secondInput as any)
+      expect(secondInput.seen).toBe("v2-dep")
+
+      const secondCopies = (await fs.readdir(tempDir)).filter((name) => name.includes(".opm-reload-"))
+      expect(secondCopies).toHaveLength(1)
+      expect(secondCopies[0]).not.toBe(firstCopies[0])
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true })
+    }
   })
 })
