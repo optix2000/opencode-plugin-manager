@@ -16,21 +16,24 @@ export type LoadManagedPluginsOptions = {
   cacheBustToken?: string
 }
 
-const TWO_ARG_HOOKS: (keyof Hooks)[] = [
-  "chat.message",
-  "chat.params",
-  "chat.headers",
-  "permission.ask",
-  "command.execute.before",
-  "tool.execute.before",
-  "shell.env",
-  "tool.execute.after",
-  "experimental.chat.messages.transform",
-  "experimental.chat.system.transform",
-  "experimental.session.compacting",
-  "experimental.text.complete",
-  "tool.definition",
-]
+type NonTwoArgHook = "event" | "config" | "tool" | "auth"
+type TwoArgHook = Exclude<keyof Hooks, NonTwoArgHook>
+
+const TWO_ARG_HOOKS = {
+  "chat.message": true,
+  "chat.params": true,
+  "chat.headers": true,
+  "permission.ask": true,
+  "command.execute.before": true,
+  "tool.execute.before": true,
+  "shell.env": true,
+  "tool.execute.after": true,
+  "experimental.chat.messages.transform": true,
+  "experimental.chat.system.transform": true,
+  "experimental.session.compacting": true,
+  "experimental.text.complete": true,
+  "tool.definition": true,
+} satisfies Record<TwoArgHook, true>
 
 export async function loadManagedPlugins(
   entries: LockEntry[],
@@ -138,7 +141,7 @@ export function mergeManagedHooks(getLoaded: () => LoadedPlugin[], logger: Logge
     }
   }
 
-  for (const hookName of TWO_ARG_HOOKS) {
+  for (const hookName of Object.keys(TWO_ARG_HOOKS) as TwoArgHook[]) {
     const fn = async (input: unknown, output: unknown) => {
       for (const plugin of getLoaded()) {
         const hook = plugin.hooks[hookName]
