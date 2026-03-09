@@ -52,9 +52,10 @@ export function normalizeGitRepo(value: string): string {
 export function parseNpmShorthand(value: string): { name: string; version?: string } {
   const lastAtIndex = value.lastIndexOf("@")
   if (lastAtIndex <= 0) return { name: value }
+  const version = value.slice(lastAtIndex + 1)
   return {
     name: value.slice(0, lastAtIndex),
-    version: value.slice(lastAtIndex + 1),
+    ...(version ? { version } : {}),
   }
 }
 

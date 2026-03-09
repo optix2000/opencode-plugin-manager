@@ -28,9 +28,9 @@ describe("parseNpmShorthand", () => {
     expect(result.version).toBeUndefined()
   })
 
-  test("trailing @ produces empty version string", () => {
+  test("trailing @ is treated as no version", () => {
     const result = parseNpmShorthand("pkg@")
-    expect(result).toEqual({ name: "pkg", version: "" })
+    expect(result).toEqual({ name: "pkg" })
   })
 })
 
