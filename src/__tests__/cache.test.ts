@@ -535,6 +535,32 @@ describe("cleanCacheDirectories", () => {
     expect(mockFsRm).not.toHaveBeenCalledWith(keptPath, expect.anything())
   })
 
+  test("removes orphan temporary npm and git directories in cache root", async () => {
+    const cacheContext = makeCacheContext("/cache")
+    mockExists.mockImplementation(async (targetPath: string) => targetPath === cacheContext.rootDir)
+    mockFsReaddir.mockImplementation(async (dirPath: string) => {
+      if (dirPath !== cacheContext.rootDir) return []
+      return [
+        makeDirent(".tmp-npm-123", true),
+        makeDirent(".tmp-git-456", true),
+        makeDirent(".tmp-local-999", true),
+        makeDirent(".tmp-npm-file", false),
+        makeDirent("npm", true),
+      ]
+    })
+
+    const result = await cache.cleanCacheDirectories(cacheContext, EMPTY_LOCKFILE)
+
+    const removedNpmTempPath = path.resolve(path.join(cacheContext.rootDir, ".tmp-npm-123"))
+    const removedGitTempPath = path.resolve(path.join(cacheContext.rootDir, ".tmp-git-456"))
+    const ignoredTempPath = path.resolve(path.join(cacheContext.rootDir, ".tmp-local-999"))
+
+    expect(result.removedPaths.sort()).toEqual([removedGitTempPath, removedNpmTempPath].sort())
+    expect(mockFsRm).toHaveBeenCalledWith(removedNpmTempPath, { recursive: true, force: true })
+    expect(mockFsRm).toHaveBeenCalledWith(removedGitTempPath, { recursive: true, force: true })
+    expect(mockFsRm).not.toHaveBeenCalledWith(ignoredTempPath, expect.anything())
+  })
+
   test("skips non-existent source directories", async () => {
     const cacheContext = makeCacheContext("/cache")
     mockExists.mockResolvedValue(false)

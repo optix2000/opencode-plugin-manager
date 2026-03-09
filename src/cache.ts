@@ -285,6 +285,21 @@ export async function cleanCacheDirectories(
     }
   }
 
+  if (await exists(cache.rootDir)) {
+    const rootChildren = await fs.readdir(cache.rootDir, { withFileTypes: true })
+    for (const child of rootChildren) {
+      if (!child.isDirectory()) continue
+      if (!child.name.startsWith(".tmp-npm-") && !child.name.startsWith(".tmp-git-")) continue
+
+      const childPath = path.resolve(path.join(cache.rootDir, child.name))
+      await fs.rm(childPath, { recursive: true, force: true })
+      removedPaths.push(childPath)
+      logger.debug("Removed stale temporary cache directory", {
+        path: childPath,
+      })
+    }
+  }
+
   return { removedPaths }
 }
 
