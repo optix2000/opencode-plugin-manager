@@ -224,7 +224,7 @@ describe("loadMergedConfig", () => {
     }
   })
 
-  test("rejects config files with unknown top-level keys", async () => {
+  test("rejects config files missing required plugins key", async () => {
     setExistingFiles([GLOBAL_CONFIG_JSON])
     setConfigFiles({
       [GLOBAL_CONFIG_JSON]: {
@@ -244,6 +244,20 @@ describe("loadMergedConfig", () => {
     } finally {
       console.warn = originalWarn
     }
+  })
+
+  test("accepts config files with $schema and other extra top-level keys", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON])
+    setConfigFiles({
+      [GLOBAL_CONFIG_JSON]: {
+        $schema: "https://example.com/schema.json",
+        plugins: ["my-plugin@1.0"],
+      },
+    })
+
+    const result = await loadMergedConfig(input("/repo", "/repo/subdir"))
+    expect(result.plugins).toHaveLength(1)
+    expect(result.plugins[0].source).toBe("npm")
   })
 
   test("rejects plugin entries with unknown keys", async () => {

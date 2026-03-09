@@ -57,7 +57,7 @@ export const PluginInputSchema = z.union([
 export const PluginsFileSchema = z.object({
   cacheDir: z.string().min(1).optional(),
   plugins: z.array(PluginInputSchema),
-}).strict()
+})
 
 export type PluginInput = z.infer<typeof PluginInputSchema>
 export type PluginsFile = z.infer<typeof PluginsFileSchema>
