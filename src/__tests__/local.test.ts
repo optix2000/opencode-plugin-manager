@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test"
 import path from "node:path"
+import type { Logger } from "../log"
 import { makeSpec } from "./helpers"
 
 const mockFsStat = mock()
@@ -15,6 +16,12 @@ mock.module("../sources/local.deps", () => ({
 }))
 
 const { syncLocalPlugin } = await import("../sources/local")
+const TEST_LOGGER: Logger = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+}
 
 function makeStat(kind: "file" | "directory" | "other") {
   return {
@@ -49,7 +56,7 @@ describe("syncLocalPlugin", () => {
     mockFsStat.mockResolvedValue(makeStat("directory"))
     mockResolvePluginEntry.mockResolvedValue(resolvedEntry)
 
-    const result = await syncLocalPlugin(spec)
+    const result = await syncLocalPlugin(spec, TEST_LOGGER)
 
     expect(mockFsStat).toHaveBeenCalledWith(resolvedPluginPath)
     expect(mockResolvePluginEntry).toHaveBeenCalledTimes(1)
@@ -74,7 +81,7 @@ describe("syncLocalPlugin", () => {
 
     mockFsStat.mockResolvedValue(makeStat("file"))
 
-    const result = await syncLocalPlugin(spec)
+    const result = await syncLocalPlugin(spec, TEST_LOGGER)
 
     expect(mockResolvePluginEntry).not.toHaveBeenCalled()
     expect(result).toMatchObject({
@@ -97,7 +104,7 @@ describe("syncLocalPlugin", () => {
 
     mockFsStat.mockResolvedValue(makeStat("file"))
 
-    await expect(syncLocalPlugin(spec)).rejects.toThrow(
+    await expect(syncLocalPlugin(spec, TEST_LOGGER)).rejects.toThrow(
       `'entry' cannot be set when local plugin path points to a file: ${resolvedPluginPath}`,
     )
     expect(mockResolvePluginEntry).not.toHaveBeenCalled()
@@ -110,7 +117,7 @@ describe("syncLocalPlugin", () => {
 
     mockFsStat.mockRejectedValue(new Error("ENOENT"))
 
-    await expect(syncLocalPlugin(spec)).rejects.toThrow(`Local plugin path does not exist: ${resolvedPluginPath}`)
+    await expect(syncLocalPlugin(spec, TEST_LOGGER)).rejects.toThrow(`Local plugin path does not exist: ${resolvedPluginPath}`)
     expect(mockRunCommand).not.toHaveBeenCalled()
     expect(mockResolvePluginEntry).not.toHaveBeenCalled()
   })
@@ -122,7 +129,7 @@ describe("syncLocalPlugin", () => {
 
     mockFsStat.mockResolvedValue(makeStat("other"))
 
-    await expect(syncLocalPlugin(spec)).rejects.toThrow(
+    await expect(syncLocalPlugin(spec, TEST_LOGGER)).rejects.toThrow(
       `Local plugin path must be a file or directory: ${resolvedPluginPath}`,
     )
     expect(mockRunCommand).not.toHaveBeenCalled()
@@ -143,7 +150,7 @@ describe("syncLocalPlugin", () => {
     mockFsStat.mockResolvedValue(makeStat("directory"))
     mockResolvePluginEntry.mockResolvedValue(path.join(resolvedPluginPath, "index.js"))
 
-    await syncLocalPlugin(spec)
+    await syncLocalPlugin(spec, TEST_LOGGER)
 
     expect(mockRunCommand).toHaveBeenCalledTimes(1)
     expect(mockRunCommand).toHaveBeenCalledWith({
@@ -151,6 +158,7 @@ describe("syncLocalPlugin", () => {
       args: ["-lc", "npm run build"],
       cwd: resolvedPluginPath,
       timeout: 5000,
+      logger: TEST_LOGGER,
     })
   })
 
@@ -167,7 +175,7 @@ describe("syncLocalPlugin", () => {
 
     mockFsStat.mockResolvedValue(makeStat("file"))
 
-    await syncLocalPlugin(spec)
+    await syncLocalPlugin(spec, TEST_LOGGER)
 
     expect(mockRunCommand).toHaveBeenCalledTimes(1)
     expect(mockRunCommand).toHaveBeenCalledWith({
@@ -175,6 +183,7 @@ describe("syncLocalPlugin", () => {
       args: ["-lc", "node build.mjs"],
       cwd: path.dirname(resolvedPluginPath),
       timeout: 1200,
+      logger: TEST_LOGGER,
     })
     expect(mockResolvePluginEntry).not.toHaveBeenCalled()
   })

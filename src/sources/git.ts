@@ -1,6 +1,6 @@
 import path from "node:path"
 import type { CacheContext } from "../cache"
-import { createConsoleLogger, type Logger } from "../log"
+import type { Logger } from "../log"
 import type { LockEntry, ManagedPluginSpec } from "../types"
 import {
   ensureDir,
@@ -13,18 +13,18 @@ import {
 } from "./git.deps"
 
 type GitSpec = Extract<ManagedPluginSpec, { source: "git" }>
+const GIT_NETWORK_TIMEOUT_MS = 180_000
 
 export async function syncGitPlugin(
   spec: GitSpec,
   cache: CacheContext,
   options: { lockedCommit?: string } = {},
-  logger?: Logger,
+  logger: Logger,
 ): Promise<LockEntry> {
-  const activeLogger = logger ?? createConsoleLogger()
   const tempDir = await fs.mkdtemp(path.join(cache.rootDir, ".tmp-git-"))
   const cloneDir = path.join(tempDir, "repo")
 
-  activeLogger.info("Syncing git plugin", {
+  logger.info("Syncing git plugin", {
     pluginID: spec.id,
     repo: spec.repo,
     ref: spec.ref,
@@ -36,27 +36,30 @@ export async function syncGitPlugin(
     await runCommand({
       command: "git",
       args: ["-c", "core.hooksPath=/dev/null", "clone", spec.repo, cloneDir],
-      ...(logger ? { logger } : {}),
+      timeout: GIT_NETWORK_TIMEOUT_MS,
+      logger,
     })
 
     if (options.lockedCommit) {
       await runCommand({
         command: "git",
         args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "checkout", "--end-of-options", options.lockedCommit],
-        ...(logger ? { logger } : {}),
+        timeout: GIT_NETWORK_TIMEOUT_MS,
+        logger,
       })
     } else if (spec.ref) {
       await runCommand({
         command: "git",
         args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "checkout", "--end-of-options", spec.ref],
-        ...(logger ? { logger } : {}),
+        timeout: GIT_NETWORK_TIMEOUT_MS,
+        logger,
       })
     }
 
     const commit = (await runCommand({
       command: "git",
       args: ["-C", cloneDir, "rev-parse", "--end-of-options", "HEAD"],
-      ...(logger ? { logger } : {}),
+      logger,
     })).stdout.trim()
 
     if (spec.build) {
@@ -65,7 +68,7 @@ export async function syncGitPlugin(
         args: ["-lc", spec.build.command],
         cwd: cloneDir,
         timeout: spec.build.timeout,
-        ...(logger ? { logger } : {}),
+        logger,
       })
     }
 
@@ -81,7 +84,7 @@ export async function syncGitPlugin(
     })
 
     const resolvedPath = await resolvePluginEntry(targetDir, spec.entry)
-    activeLogger.info("Git plugin synced", {
+    logger.info("Git plugin synced", {
       pluginID: spec.id,
       commit,
       resolvedPath,
@@ -99,7 +102,7 @@ export async function syncGitPlugin(
   } finally {
     if (await exists(tempDir)) {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
-      activeLogger.debug("Removed temporary git sync directory", {
+      logger.debug("Removed temporary git sync directory", {
         tempDir,
       })
     }

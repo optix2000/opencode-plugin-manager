@@ -19,6 +19,8 @@ import {
 import type { SyncMode } from "./resolver"
 import type { Lockfile } from "./types"
 
+const NPM_REGISTRY_TIMEOUT_MS = 10_000
+
 export const PluginManager: Plugin = async (input) => {
   const logger = createOpencodeLogger(input.client as any, "plugin-manager", createNoopLogger())
   const TOOL_IDS = {
@@ -295,7 +297,9 @@ async function getCurrentPluginManagerVersion(): Promise<string | undefined> {
 
 async function getLatestRegistryVersion(): Promise<string | undefined> {
   try {
-    const response = await fetch("https://registry.npmjs.org/opencode-plugin-manager/latest")
+    const response = await fetch("https://registry.npmjs.org/opencode-plugin-manager/latest", {
+      signal: AbortSignal.timeout(NPM_REGISTRY_TIMEOUT_MS),
+    })
     if (!response.ok) return undefined
     const payload = (await response.json()) as { version?: string }
     return payload.version

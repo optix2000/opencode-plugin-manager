@@ -58,7 +58,7 @@ export async function syncPlugins(input: {
     }
 
     try {
-      const synced = await syncSinglePlugin(spec, cache, compatibleLock, mode, logger)
+      const synced = await syncSinglePlugin(spec, cache, compatibleLock, mode, activeLogger)
       nextPlugins[spec.id] = synced
       updated.push(`${pluginDisplayName(spec)} (${mode})`)
       activeLogger.debug("Plugin synced", {
@@ -146,24 +146,20 @@ async function syncSinglePlugin(
   cache: CacheContext,
   previous: LockEntry | undefined,
   mode: SyncMode,
-  logger?: Logger,
+  logger: Logger,
 ): Promise<LockEntry> {
   if (spec.source === "npm") {
     const lockedVersion = mode === "install" && previous?.source === "npm" ? previous.resolvedVersion : undefined
-    return logger
-      ? syncNpmPlugin(spec, cache, { lockedVersion }, logger)
-      : syncNpmPlugin(spec, cache, { lockedVersion })
+    return syncNpmPlugin(spec, cache, { lockedVersion }, logger)
   }
 
   if (spec.source === "git") {
     const lockedCommit = mode === "install" && previous?.source === "git" ? previous.commit : undefined
-    return logger
-      ? syncGitPlugin(spec, cache, { lockedCommit }, logger)
-      : syncGitPlugin(spec, cache, { lockedCommit })
+    return syncGitPlugin(spec, cache, { lockedCommit }, logger)
   }
 
   if (spec.source === "local") {
-    return logger ? syncLocalPlugin(spec, logger) : syncLocalPlugin(spec)
+    return syncLocalPlugin(spec, logger)
   }
 
   const _exhaustive: never = spec

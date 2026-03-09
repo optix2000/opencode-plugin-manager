@@ -1,14 +1,13 @@
 import path from "node:path"
-import { createConsoleLogger, type Logger } from "../log"
+import type { Logger } from "../log"
 import type { LockEntry, ManagedPluginSpec } from "../types"
 import { fs, resolvePluginEntry, runCommand } from "./local.deps"
 
 type LocalSpec = Extract<ManagedPluginSpec, { source: "local" }>
 
-export async function syncLocalPlugin(spec: LocalSpec, logger?: Logger): Promise<LockEntry> {
-  const activeLogger = logger ?? createConsoleLogger()
+export async function syncLocalPlugin(spec: LocalSpec, logger: Logger): Promise<LockEntry> {
   const pluginPath = path.resolve(spec.path)
-  activeLogger.info("Syncing local plugin", {
+  logger.info("Syncing local plugin", {
     pluginID: spec.id,
     pluginPath,
     hasBuild: Boolean(spec.build),
@@ -30,7 +29,7 @@ export async function syncLocalPlugin(spec: LocalSpec, logger?: Logger): Promise
       args: ["-lc", spec.build.command],
       cwd: buildCwd,
       timeout: spec.build.timeout,
-      ...(logger ? { logger } : {}),
+      logger,
     })
   }
 
@@ -40,7 +39,7 @@ export async function syncLocalPlugin(spec: LocalSpec, logger?: Logger): Promise
 
   const resolvedPath = stat.isDirectory() ? await resolvePluginEntry(pluginPath, spec.entry) : pluginPath
 
-  activeLogger.info("Local plugin synced", {
+  logger.info("Local plugin synced", {
     pluginID: spec.id,
     resolvedPath,
   })

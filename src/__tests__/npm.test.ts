@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test"
 import path from "node:path"
+import type { Logger } from "../log"
 import type { LockEntry, ManagedPluginSpec } from "../types"
 import { makeCacheContext, makeSpec } from "./helpers"
 
@@ -47,6 +48,12 @@ type NpmLockEntry = Extract<LockEntry, { source: "npm" }>
 
 const TEMP_DIR = "/cache/.tmp-npm-123"
 const cache = makeCacheContext("/cache")
+const TEST_LOGGER: Logger = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+}
 
 function setExistingPaths(paths: string[]): void {
   const existing = new Set(paths.map((item) => path.resolve(item)))
@@ -69,7 +76,7 @@ async function sync(
   options: { lockedVersion?: string } = {},
 ): Promise<NpmLockEntry> {
   const spec = makeSpec("npm", overrides)
-  const result = await syncNpmPlugin(spec, cache, options)
+  const result = await syncNpmPlugin(spec, cache, options, TEST_LOGGER)
   return result as NpmLockEntry
 }
 
@@ -136,6 +143,8 @@ describe("syncNpmPlugin", () => {
       command: "bun",
       args: ["install", "--ignore-scripts"],
       cwd: TEMP_DIR,
+      timeout: expect.any(Number),
+      logger: TEST_LOGGER,
     })
   })
 

@@ -455,6 +455,10 @@ describe("opm_self_update", () => {
     const output = await hooks.tool["opm_self_update"].execute({}, context)
 
     expect(context.metadata).toHaveBeenCalledWith({ title: "Checking plugin manager updates" })
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://registry.npmjs.org/opencode-plugin-manager/latest",
+      expect.objectContaining({ signal: expect.anything() }),
+    )
     expect(output).toContain("Update available: 1.0.0 -> 1.1.0")
     expect(output).toContain('"plugin": ["opencode-plugin-manager@1.1.0"]')
     expect(output).toContain("Then restart opencode.")

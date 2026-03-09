@@ -138,7 +138,7 @@ describe("syncPlugins flow control", () => {
           resolvedVersion: "9.9.9",
         }),
       )
-      expect(mockSyncNpmPlugin).toHaveBeenCalledWith(spec, cache, { lockedVersion: previous.resolvedVersion })
+      expect(mockSyncNpmPlugin).toHaveBeenCalledWith(spec, cache, { lockedVersion: previous.resolvedVersion }, expect.anything())
     })
 
     test("syncs when lock is incompatible", async () => {
@@ -157,7 +157,7 @@ describe("syncPlugins flow control", () => {
 
       expect(result.updated).toEqual([`${spec.id} (install)`])
       expect(result.reused).toEqual([])
-      expect(mockSyncNpmPlugin).toHaveBeenCalledWith(spec, cache, { lockedVersion: undefined })
+      expect(mockSyncNpmPlugin).toHaveBeenCalledWith(spec, cache, { lockedVersion: undefined }, expect.anything())
       expect(mockIsTrustedLockEntryPath).not.toHaveBeenCalled()
     })
 
@@ -169,7 +169,7 @@ describe("syncPlugins flow control", () => {
       expect(result.updated).toEqual([`${spec.id} (install)`])
       expect(result.reused).toEqual([])
       expect(result.warnings).toEqual([])
-      expect(mockSyncGitPlugin).toHaveBeenCalledWith(spec, cache, { lockedCommit: undefined })
+      expect(mockSyncGitPlugin).toHaveBeenCalledWith(spec, cache, { lockedCommit: undefined }, expect.anything())
       expect(mockIsTrustedLockEntryPath).not.toHaveBeenCalled()
     })
   })
@@ -193,7 +193,7 @@ describe("syncPlugins flow control", () => {
       expect(result.updated).toEqual([`${spec.id} (update)`])
       expect(result.reused).toEqual([])
       expect(result.warnings).toEqual([])
-      expect(mockSyncGitPlugin).toHaveBeenCalledWith(spec, cache, { lockedCommit: undefined })
+      expect(mockSyncGitPlugin).toHaveBeenCalledWith(spec, cache, { lockedCommit: undefined }, expect.anything())
     })
   })
 
@@ -412,7 +412,7 @@ describe("isCompatibleLock behavior via syncPlugins", () => {
     const result = await runSyncPlugins([spec], lockfileWith(spec, previous), "install")
 
     expect(result.updated).toEqual([`${spec.id} (install)`])
-    expect(mockSyncGitPlugin).toHaveBeenCalledWith(spec, cache, { lockedCommit: undefined })
+    expect(mockSyncGitPlugin).toHaveBeenCalledWith(spec, cache, { lockedCommit: undefined }, expect.anything())
   })
 
   test("local lock is compatible when path and entry match", async () => {
@@ -450,7 +450,7 @@ describe("isCompatibleLock behavior via syncPlugins", () => {
     const result = await runSyncPlugins([spec], lockfileWith(spec, previous), "install")
 
     expect(result.updated).toEqual([`${spec.id} (install)`])
-    expect(mockSyncLocalPlugin).toHaveBeenCalledWith(spec)
+    expect(mockSyncLocalPlugin).toHaveBeenCalledWith(spec, expect.anything())
   })
 
   test("treats source type mismatch as incompatible", async () => {
@@ -469,7 +469,7 @@ describe("isCompatibleLock behavior via syncPlugins", () => {
     const result = await runSyncPlugins([spec], lockfileWith(spec, previous), "install")
 
     expect(result.updated).toEqual([`${spec.id} (install)`])
-    expect(mockSyncNpmPlugin).toHaveBeenCalledWith(spec, cache, { lockedVersion: undefined })
+    expect(mockSyncNpmPlugin).toHaveBeenCalledWith(spec, cache, { lockedVersion: undefined }, expect.anything())
     expect(mockIsTrustedLockEntryPath).not.toHaveBeenCalled()
   })
 })
@@ -486,7 +486,7 @@ describe("syncSinglePlugin dispatch via syncPlugins", () => {
     mockIsTrustedLockEntryPath.mockResolvedValue(false)
     await runSyncPlugins([spec], lockfileWith(spec, previous), "install")
 
-    expect(mockSyncNpmPlugin).toHaveBeenCalledWith(spec, cache, { lockedVersion: "2.1.0" })
+    expect(mockSyncNpmPlugin).toHaveBeenCalledWith(spec, cache, { lockedVersion: "2.1.0" }, expect.anything())
   })
 
   test("git sync receives lockedCommit in install mode", async () => {
@@ -505,7 +505,7 @@ describe("syncSinglePlugin dispatch via syncPlugins", () => {
     mockIsTrustedLockEntryPath.mockResolvedValue(false)
     await runSyncPlugins([spec], lockfileWith(spec, previous), "install")
 
-    expect(mockSyncGitPlugin).toHaveBeenCalledWith(spec, cache, { lockedCommit: "commit-123" })
+    expect(mockSyncGitPlugin).toHaveBeenCalledWith(spec, cache, { lockedCommit: "commit-123" }, expect.anything())
   })
 
   test("local specs dispatch to syncLocalPlugin", async () => {
@@ -513,7 +513,7 @@ describe("syncSinglePlugin dispatch via syncPlugins", () => {
 
     await runSyncPlugins([spec], emptyLockfile(), "install")
 
-    expect(mockSyncLocalPlugin).toHaveBeenCalledWith(spec)
+    expect(mockSyncLocalPlugin).toHaveBeenCalledWith(spec, expect.anything())
     expect(mockSyncNpmPlugin).not.toHaveBeenCalled()
     expect(mockSyncGitPlugin).not.toHaveBeenCalled()
   })
@@ -545,8 +545,8 @@ describe("syncSinglePlugin dispatch via syncPlugins", () => {
 
     await runSyncPlugins([npmSpec, gitSpec], currentLock, "update")
 
-    expect(mockSyncNpmPlugin).toHaveBeenCalledWith(npmSpec, cache, { lockedVersion: undefined })
-    expect(mockSyncGitPlugin).toHaveBeenCalledWith(gitSpec, cache, { lockedCommit: undefined })
+    expect(mockSyncNpmPlugin).toHaveBeenCalledWith(npmSpec, cache, { lockedVersion: undefined }, expect.anything())
+    expect(mockSyncGitPlugin).toHaveBeenCalledWith(gitSpec, cache, { lockedCommit: undefined }, expect.anything())
   })
 })
 

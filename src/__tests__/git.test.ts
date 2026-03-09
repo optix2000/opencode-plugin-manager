@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test"
 import path from "node:path"
+import type { Logger } from "../log"
 import type { ManagedPluginSpec } from "../types"
 import { makeCacheContext } from "./helpers"
 
@@ -37,6 +38,14 @@ type RunCommandInput = {
   args: string[]
   cwd?: string
   timeout?: number
+  logger?: Logger
+}
+
+const TEST_LOGGER: Logger = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
 }
 
 const CACHE_ROOT = "/cache-root"
@@ -100,7 +109,7 @@ describe("syncGitPlugin", () => {
       throw new Error(`Unexpected command: ${command} ${args.join(" ")}`)
     })
 
-    const result = await syncGitPlugin(spec, cache)
+    const result = await syncGitPlugin(spec, cache, {}, TEST_LOGGER)
     const runCalls = getRunCalls()
 
     expect(mockFsMkdtemp).toHaveBeenCalledWith(path.join(cache.rootDir, ".tmp-git-"))
@@ -108,10 +117,13 @@ describe("syncGitPlugin", () => {
     expect(runCalls[0]).toEqual({
       command: "git",
       args: ["-c", "core.hooksPath=/dev/null", "clone", spec.repo, cloneDir],
+      timeout: expect.any(Number),
+      logger: TEST_LOGGER,
     })
     expect(runCalls[1]).toEqual({
       command: "git",
       args: ["-C", cloneDir, "rev-parse", "--end-of-options", "HEAD"],
+      logger: TEST_LOGGER,
     })
 
     expect(runCalls.some((call) => call.args.includes("checkout"))).toBe(false)
@@ -155,7 +167,7 @@ describe("syncGitPlugin", () => {
       throw new Error(`Unexpected args: ${args.join(" ")}`)
     })
 
-    await syncGitPlugin(spec, cache, { lockedCommit })
+    await syncGitPlugin(spec, cache, { lockedCommit }, TEST_LOGGER)
 
     const checkoutCalls = getRunCalls().filter((call) => call.args.includes("checkout"))
     expect(checkoutCalls).toHaveLength(1)
@@ -170,6 +182,8 @@ describe("syncGitPlugin", () => {
         "--end-of-options",
         lockedCommit,
       ],
+      timeout: expect.any(Number),
+      logger: TEST_LOGGER,
     })
   })
 
@@ -185,13 +199,15 @@ describe("syncGitPlugin", () => {
       throw new Error(`Unexpected args: ${args.join(" ")}`)
     })
 
-    await syncGitPlugin(spec, cache)
+    await syncGitPlugin(spec, cache, {}, TEST_LOGGER)
 
     const checkoutCalls = getRunCalls().filter((call) => call.args.includes("checkout"))
     expect(checkoutCalls).toHaveLength(1)
     expect(checkoutCalls[0]).toEqual({
       command: "git",
       args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "checkout", "--end-of-options", spec.ref!],
+      timeout: expect.any(Number),
+      logger: TEST_LOGGER,
     })
   })
 
@@ -212,7 +228,7 @@ describe("syncGitPlugin", () => {
       throw new Error(`Unexpected command: ${command} ${args.join(" ")}`)
     })
 
-    await syncGitPlugin(spec, cache)
+    await syncGitPlugin(spec, cache, {}, TEST_LOGGER)
 
     const buildCalls = getRunCalls().filter((call) => call.command === "sh")
     expect(buildCalls).toHaveLength(1)
@@ -221,6 +237,7 @@ describe("syncGitPlugin", () => {
       args: ["-lc", spec.build!.command],
       cwd: cloneDir,
       timeout: spec.build!.timeout,
+      logger: TEST_LOGGER,
     })
   })
 
@@ -234,7 +251,7 @@ describe("syncGitPlugin", () => {
       throw new Error(`Unexpected args: ${args.join(" ")}`)
     })
 
-    await expect(syncGitPlugin(spec, cache)).rejects.toBe(cloneError)
+    await expect(syncGitPlugin(spec, cache, {}, TEST_LOGGER)).rejects.toBe(cloneError)
 
     expect(getRunCalls()).toHaveLength(1)
     expect(mockEnsureDir).not.toHaveBeenCalled()

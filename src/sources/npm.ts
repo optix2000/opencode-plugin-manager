@@ -1,6 +1,6 @@
 import path from "node:path"
 import type { CacheContext } from "../cache"
-import { createConsoleLogger, type Logger } from "../log"
+import type { Logger } from "../log"
 import type { LockEntry, ManagedPluginSpec } from "../types"
 import {
   ensureDir,
@@ -13,18 +13,18 @@ import {
 } from "./npm.deps"
 
 type NpmSpec = Extract<ManagedPluginSpec, { source: "npm" }>
+const NPM_INSTALL_TIMEOUT_MS = 180_000
 
 export async function syncNpmPlugin(
   spec: NpmSpec,
   cache: CacheContext,
   options: { lockedVersion?: string } = {},
-  logger?: Logger,
+  logger: Logger,
 ): Promise<LockEntry> {
-  const activeLogger = logger ?? createConsoleLogger()
   const requestedVersion = options.lockedVersion ?? spec.version ?? "latest"
   const tempDir = await fs.mkdtemp(path.join(cache.rootDir, ".tmp-npm-"))
 
-  activeLogger.info("Syncing npm plugin", {
+  logger.info("Syncing npm plugin", {
     pluginID: spec.id,
     package: spec.name,
     requestedVersion,
@@ -47,7 +47,8 @@ export async function syncNpmPlugin(
       command: "bun",
       args: ["install", "--ignore-scripts"],
       cwd: tempDir,
-      ...(logger ? { logger } : {}),
+      timeout: NPM_INSTALL_TIMEOUT_MS,
+      logger,
     })
 
     const moduleRoot = path.join(tempDir, "node_modules", spec.name)
@@ -75,7 +76,7 @@ export async function syncNpmPlugin(
     const packageDir = path.join(targetDir, "node_modules", spec.name)
     const resolvedPath = await resolvePluginEntry(packageDir, spec.entry)
 
-    activeLogger.info("Npm plugin synced", {
+    logger.info("Npm plugin synced", {
       pluginID: spec.id,
       package: spec.name,
       resolvedVersion,
@@ -95,7 +96,7 @@ export async function syncNpmPlugin(
   } finally {
     if (await exists(tempDir)) {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
-      activeLogger.debug("Removed temporary npm sync directory", {
+      logger.debug("Removed temporary npm sync directory", {
         tempDir,
       })
     }
