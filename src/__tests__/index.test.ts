@@ -433,9 +433,10 @@ describe("opm_sync", () => {
     const output = await hooks.tool["opm_sync"].execute({}, context)
 
     expect(callOrder).toEqual(["install", "clean"])
-    expect(context.metadata).toHaveBeenNthCalledWith(1, { title: "Syncing managed plugins" })
-    expect(context.metadata).toHaveBeenNthCalledWith(2, { title: "Installing managed plugins" })
-    expect(context.metadata).toHaveBeenNthCalledWith(3, { title: "Cleaning managed plugin cache" })
+    expect(context.metadata).toHaveBeenCalledTimes(1)
+    expect(context.metadata).toHaveBeenCalledWith({ title: "Syncing managed plugins" })
+    expect(mockLoadMergedConfig).toHaveBeenCalledTimes(2)
+    expect(mockResolveCacheContext).toHaveBeenCalledTimes(2)
 
     expect(output).toContain("Installed 1 plugin(s).")
     expect(output).toContain("Removed 1 cached plugin directory(s).")

@@ -145,26 +145,34 @@ export const PluginManager: Plugin = async (input) => {
   async function runInstallOrUpdate(mode: SyncMode, context: ToolContext): Promise<string> {
     const title = mode === "install" ? "Installing managed plugins" : "Updating managed plugins"
     context.metadata({ title })
+    mergedConfig = await loadMergedConfig(input, logger)
+    cache = resolveCacheContext(mergedConfig)
+    return runInstallOrUpdateCore(mode, mergedConfig, cache)
+  }
+
+  async function runInstallOrUpdateCore(
+    mode: SyncMode,
+    activeMergedConfig: typeof mergedConfig,
+    activeCache: typeof cache,
+  ): Promise<string> {
     logger.info("Running plugin manager tool", {
       tool: mode === "install" ? TOOL_IDS.install : TOOL_IDS.update,
       mode,
     })
 
-    mergedConfig = await loadMergedConfig(input, logger)
-    cache = resolveCacheContext(mergedConfig)
     let previousLock: Lockfile = { version: 1, plugins: {} }
 
-    const result = await withCacheLock(cache, async () => {
-      const current = await readLockfile(cache.lockfilePath, logger)
+    const result = await withCacheLock(activeCache, async () => {
+      const current = await readLockfile(activeCache.lockfilePath, logger)
       previousLock = current
       const synced = await syncPlugins({
-        specs: mergedConfig.plugins,
-        cache,
+        specs: activeMergedConfig.plugins,
+        cache: activeCache,
         currentLock: current,
         mode,
         logger,
       })
-      await writeLockfile(cache.lockfilePath, synced.lockfile)
+      await writeLockfile(activeCache.lockfilePath, synced.lockfile)
       return synced
     }, undefined, logger)
 
@@ -172,8 +180,8 @@ export const PluginManager: Plugin = async (input) => {
       logger.warn(warning)
     }
 
-    const refreshedEntries = await resolveCachedPluginPaths(mergedConfig.plugins, result.lockfile, cache, logger)
-    loaded = await loadManagedPlugins(refreshedEntries, input, cache, logger, nextReloadOptions(`tool:${mode}`))
+    const refreshedEntries = await resolveCachedPluginPaths(activeMergedConfig.plugins, result.lockfile, activeCache, logger)
+    loaded = await loadManagedPlugins(refreshedEntries, input, activeCache, logger, nextReloadOptions(`tool:${mode}`))
 
     const lines: string[] = []
     const verb = mode === "install" ? "Installed" : "Updated"
@@ -181,9 +189,9 @@ export const PluginManager: Plugin = async (input) => {
     if (result.updated.length) lines.push(`${verb}: ${result.updated.join(", ")}`)
     if (result.reused.length) lines.push(`Reused cache: ${result.reused.join(", ")}`)
     if (result.warnings.length) lines.push(`Warnings: ${result.warnings.length}`)
-    if (mergedConfig.plugins.length) {
+    if (activeMergedConfig.plugins.length) {
       lines.push("State transitions:")
-      for (const spec of mergedConfig.plugins) {
+      for (const spec of activeMergedConfig.plugins) {
         const previous = describeLockState(previousLock.plugins[spec.id])
         const next = describeLockState(result.lockfile.plugins[spec.id])
         lines.push(`${spec.id}: ${previous} -> ${next}`)
@@ -203,19 +211,22 @@ export const PluginManager: Plugin = async (input) => {
 
   async function runClean(context: ToolContext): Promise<string> {
     context.metadata({ title: "Cleaning managed plugin cache" })
+    mergedConfig = await loadMergedConfig(input, logger)
+    cache = resolveCacheContext(mergedConfig)
+    return runCleanCore(mergedConfig, cache)
+  }
+
+  async function runCleanCore(activeMergedConfig: typeof mergedConfig, activeCache: typeof cache): Promise<string> {
     logger.info("Running plugin manager tool", {
       tool: TOOL_IDS.clean,
     })
 
-    mergedConfig = await loadMergedConfig(input, logger)
-    cache = resolveCacheContext(mergedConfig)
-
-    const result = await withCacheLock(cache, async () => {
-      const current = await readLockfile(cache.lockfilePath, logger)
-      const configuredIDs = new Set(mergedConfig.plugins.map((plugin) => plugin.id))
+    const result = await withCacheLock(activeCache, async () => {
+      const current = await readLockfile(activeCache.lockfilePath, logger)
+      const configuredIDs = new Set(activeMergedConfig.plugins.map((plugin) => plugin.id))
       const pruned = await pruneLockfile(current, configuredIDs)
-      const cleaned = await cleanCacheDirectories(cache, pruned.lockfile, logger)
-      await writeLockfile(cache.lockfilePath, pruned.lockfile)
+      const cleaned = await cleanCacheDirectories(activeCache, pruned.lockfile, logger)
+      await writeLockfile(activeCache.lockfilePath, pruned.lockfile)
       return {
         lockfile: pruned.lockfile,
         prunedIDs: pruned.prunedIDs,
@@ -223,8 +234,8 @@ export const PluginManager: Plugin = async (input) => {
       }
     }, undefined, logger)
 
-    const refreshedEntries = await resolveCachedPluginPaths(mergedConfig.plugins, result.lockfile, cache, logger)
-    loaded = await loadManagedPlugins(refreshedEntries, input, cache, logger, nextReloadOptions("tool:clean"))
+    const refreshedEntries = await resolveCachedPluginPaths(activeMergedConfig.plugins, result.lockfile, activeCache, logger)
+    loaded = await loadManagedPlugins(refreshedEntries, input, activeCache, logger, nextReloadOptions("tool:clean"))
 
     const lines: string[] = []
     lines.push(`Removed ${result.removedPaths.length} cached plugin directory(s).`)
@@ -243,8 +254,10 @@ export const PluginManager: Plugin = async (input) => {
     logger.info("Running plugin manager tool", {
       tool: TOOL_IDS.sync,
     })
-    const installOutput = await runInstallOrUpdate("install", context)
-    const cleanOutput = await runClean(context)
+    mergedConfig = await loadMergedConfig(input, logger)
+    cache = resolveCacheContext(mergedConfig)
+    const installOutput = await runInstallOrUpdateCore("install", mergedConfig, cache)
+    const cleanOutput = await runCleanCore(mergedConfig, cache)
     logger.info("Completed plugin manager tool", {
       tool: TOOL_IDS.sync,
     })
