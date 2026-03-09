@@ -34,14 +34,34 @@ export async function syncGitPlugin(
   })
 
   try {
-    await runCommand({
-      command: "git",
-      args: ["-c", "core.hooksPath=/dev/null", "clone", spec.repo, cloneDir],
-      timeout: GIT_NETWORK_TIMEOUT_MS,
-      logger,
-    })
-
     if (options.lockedCommit) {
+      // Shallow-clone HEAD, then try to fetch the specific commit.
+      // Not all servers support fetching by SHA, so fall back to a full clone.
+      await runCommand({
+        command: "git",
+        args: ["-c", "core.hooksPath=/dev/null", "clone", "--depth", "1", spec.repo, cloneDir],
+        timeout: GIT_NETWORK_TIMEOUT_MS,
+        logger,
+      })
+      try {
+        await runCommand({
+          command: "git",
+          args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "fetch", "--depth", "1", "origin", "--end-of-options", options.lockedCommit],
+          timeout: GIT_NETWORK_TIMEOUT_MS,
+          logger,
+        })
+      } catch {
+        logger.info("Shallow fetch by commit failed; falling back to full fetch", {
+          pluginID: spec.id,
+          commit: options.lockedCommit,
+        })
+        await runCommand({
+          command: "git",
+          args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "fetch", "--unshallow"],
+          timeout: GIT_NETWORK_TIMEOUT_MS,
+          logger,
+        })
+      }
       await runCommand({
         command: "git",
         args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "checkout", "--end-of-options", options.lockedCommit],
@@ -49,9 +69,18 @@ export async function syncGitPlugin(
         logger,
       })
     } else if (spec.ref) {
+      // Shallow-clone directly at the target ref (branch or tag).
       await runCommand({
         command: "git",
-        args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "checkout", "--end-of-options", spec.ref],
+        args: ["-c", "core.hooksPath=/dev/null", "clone", "--depth", "1", "--branch", spec.ref, spec.repo, cloneDir],
+        timeout: GIT_NETWORK_TIMEOUT_MS,
+        logger,
+      })
+    } else {
+      // No ref or locked commit — shallow-clone HEAD.
+      await runCommand({
+        command: "git",
+        args: ["-c", "core.hooksPath=/dev/null", "clone", "--depth", "1", spec.repo, cloneDir],
         timeout: GIT_NETWORK_TIMEOUT_MS,
         logger,
       })

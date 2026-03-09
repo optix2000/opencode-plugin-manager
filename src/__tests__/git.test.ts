@@ -95,7 +95,7 @@ beforeEach(() => {
 })
 
 describe("syncGitPlugin", () => {
-  test("clones and rev-parses without checkout when neither lockedCommit nor ref is set", async () => {
+  test("shallow-clones HEAD without checkout when neither lockedCommit nor ref is set", async () => {
     const cache = makeCacheContext(CACHE_ROOT)
     const spec = makeGitSpec({ ref: undefined })
     const cloneDir = path.join(TEMP_DIR, "repo")
@@ -103,10 +103,10 @@ describe("syncGitPlugin", () => {
     mockRunCommand.mockImplementation(async ({ command, args }: RunCommandInput) => {
       expect(command).toBe("git")
 
-      if (args[2] === "clone") {
+      if (args.includes("clone")) {
         return { stdout: "", stderr: "" }
       }
-      if (args[2] === "rev-parse") {
+      if (args.includes("rev-parse")) {
         return { stdout: `${COMMIT}\n`, stderr: "" }
       }
 
@@ -120,7 +120,7 @@ describe("syncGitPlugin", () => {
     expect(runCalls).toHaveLength(2)
     expect(runCalls[0]).toEqual({
       command: "git",
-      args: ["-c", "core.hooksPath=/dev/null", "clone", spec.repo, cloneDir],
+      args: ["-c", "core.hooksPath=/dev/null", "clone", "--depth", "1", spec.repo, cloneDir],
       timeout: expect.any(Number),
       logger: TEST_LOGGER,
     })
@@ -160,61 +160,115 @@ describe("syncGitPlugin", () => {
     expect(mockFsRm).toHaveBeenCalledWith(TEMP_DIR, { recursive: true, force: true })
   })
 
-  test("uses lockedCommit checkout when both lockedCommit and spec.ref are present", async () => {
+  test("shallow-clones then fetches lockedCommit when both lockedCommit and spec.ref are present", async () => {
     const cache = makeCacheContext(CACHE_ROOT)
     const spec = makeGitSpec({ ref: "main" })
     const lockedCommit = "deadbeefcafebabe"
     const cloneDir = path.join(TEMP_DIR, "repo")
 
     mockRunCommand.mockImplementation(async ({ args }: RunCommandInput) => {
-      if (args[2] === "clone") return { stdout: "", stderr: "" }
-      if (args[4] === "checkout") return { stdout: "", stderr: "" }
-      if (args[2] === "rev-parse") return { stdout: `${COMMIT}\n`, stderr: "" }
+      if (args.includes("clone")) return { stdout: "", stderr: "" }
+      if (args.includes("fetch")) return { stdout: "", stderr: "" }
+      if (args.includes("checkout")) return { stdout: "", stderr: "" }
+      if (args.includes("rev-parse")) return { stdout: `${COMMIT}\n`, stderr: "" }
       throw new Error(`Unexpected args: ${args.join(" ")}`)
     })
 
     await syncGitPlugin(spec, cache, { lockedCommit }, TEST_LOGGER)
+    const runCalls = getRunCalls()
 
-    const checkoutCalls = getRunCalls().filter((call) => call.args.includes("checkout"))
+    // Should shallow-clone first
+    expect(runCalls[0]).toEqual({
+      command: "git",
+      args: ["-c", "core.hooksPath=/dev/null", "clone", "--depth", "1", spec.repo, cloneDir],
+      timeout: expect.any(Number),
+      logger: TEST_LOGGER,
+    })
+
+    // Then shallow-fetch the specific commit
+    const fetchCalls = runCalls.filter((call) => call.args.includes("fetch"))
+    expect(fetchCalls).toHaveLength(1)
+    expect(fetchCalls[0]).toEqual({
+      command: "git",
+      args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "fetch", "--depth", "1", "origin", "--end-of-options", lockedCommit],
+      timeout: expect.any(Number),
+      logger: TEST_LOGGER,
+    })
+
+    // Then checkout the commit
+    const checkoutCalls = runCalls.filter((call) => call.args.includes("checkout"))
     expect(checkoutCalls).toHaveLength(1)
     expect(checkoutCalls[0]).toEqual({
       command: "git",
-      args: [
-        "-C",
-        cloneDir,
-        "-c",
-        "core.hooksPath=/dev/null",
-        "checkout",
-        "--end-of-options",
-        lockedCommit,
-      ],
+      args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "checkout", "--end-of-options", lockedCommit],
       timeout: expect.any(Number),
       logger: TEST_LOGGER,
     })
   })
 
-  test("checks out spec.ref when lockedCommit is not provided", async () => {
+  test("falls back to full fetch when shallow fetch by commit fails", async () => {
+    const cache = makeCacheContext(CACHE_ROOT)
+    const spec = makeGitSpec({ ref: "main" })
+    const lockedCommit = "deadbeefcafebabe"
+    const cloneDir = path.join(TEMP_DIR, "repo")
+
+    mockRunCommand.mockImplementation(async ({ args }: RunCommandInput) => {
+      if (args.includes("clone")) return { stdout: "", stderr: "" }
+      if (args.includes("fetch") && args.includes(lockedCommit)) throw new Error("server does not allow request for unadvertised object")
+      if (args.includes("--unshallow")) return { stdout: "", stderr: "" }
+      if (args.includes("checkout")) return { stdout: "", stderr: "" }
+      if (args.includes("rev-parse")) return { stdout: `${COMMIT}\n`, stderr: "" }
+      throw new Error(`Unexpected args: ${args.join(" ")}`)
+    })
+
+    await syncGitPlugin(spec, cache, { lockedCommit }, TEST_LOGGER)
+    const runCalls = getRunCalls()
+
+    // Should have: clone, fetch (fails), unshallow, checkout, rev-parse
+    const fetchCalls = runCalls.filter((call) => call.args.includes("fetch"))
+    expect(fetchCalls).toHaveLength(2)
+
+    // First fetch: shallow by commit (fails)
+    expect(fetchCalls[0].args).toContain(lockedCommit)
+
+    // Second fetch: full unshallow
+    expect(fetchCalls[1]).toEqual({
+      command: "git",
+      args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "fetch", "--unshallow"],
+      timeout: expect.any(Number),
+      logger: TEST_LOGGER,
+    })
+
+    // Checkout still happens
+    const checkoutCalls = runCalls.filter((call) => call.args.includes("checkout"))
+    expect(checkoutCalls).toHaveLength(1)
+    expect(checkoutCalls[0].args).toContain(lockedCommit)
+  })
+
+  test("shallow-clones at spec.ref with --branch when lockedCommit is not provided", async () => {
     const cache = makeCacheContext(CACHE_ROOT)
     const spec = makeGitSpec({ ref: "release/v1" })
     const cloneDir = path.join(TEMP_DIR, "repo")
 
     mockRunCommand.mockImplementation(async ({ args }: RunCommandInput) => {
-      if (args[2] === "clone") return { stdout: "", stderr: "" }
-      if (args[4] === "checkout") return { stdout: "", stderr: "" }
-      if (args[2] === "rev-parse") return { stdout: `${COMMIT}\n`, stderr: "" }
+      if (args.includes("clone")) return { stdout: "", stderr: "" }
+      if (args.includes("rev-parse")) return { stdout: `${COMMIT}\n`, stderr: "" }
       throw new Error(`Unexpected args: ${args.join(" ")}`)
     })
 
     await syncGitPlugin(spec, cache, {}, TEST_LOGGER)
+    const runCalls = getRunCalls()
 
-    const checkoutCalls = getRunCalls().filter((call) => call.args.includes("checkout"))
-    expect(checkoutCalls).toHaveLength(1)
-    expect(checkoutCalls[0]).toEqual({
+    // Should shallow-clone with --branch, no separate checkout
+    expect(runCalls[0]).toEqual({
       command: "git",
-      args: ["-C", cloneDir, "-c", "core.hooksPath=/dev/null", "checkout", "--end-of-options", spec.ref!],
+      args: ["-c", "core.hooksPath=/dev/null", "clone", "--depth", "1", "--branch", spec.ref!, spec.repo, cloneDir],
       timeout: expect.any(Number),
       logger: TEST_LOGGER,
     })
+
+    const checkoutCalls = runCalls.filter((call) => call.args.includes("checkout"))
+    expect(checkoutCalls).toHaveLength(0)
   })
 
   test("runs build command with cwd and timeout when build is configured", async () => {
@@ -228,8 +282,8 @@ describe("syncGitPlugin", () => {
     const cloneDir = path.join(TEMP_DIR, "repo")
 
     mockRunCommand.mockImplementation(async ({ command, args }: RunCommandInput) => {
-      if (command === "git" && args[2] === "clone") return { stdout: "", stderr: "" }
-      if (command === "git" && args[2] === "rev-parse") return { stdout: `${COMMIT}\n`, stderr: "" }
+      if (command === "git" && args.includes("clone")) return { stdout: "", stderr: "" }
+      if (command === "git" && args.includes("rev-parse")) return { stdout: `${COMMIT}\n`, stderr: "" }
       if (command === "sh") return { stdout: "", stderr: "" }
       throw new Error(`Unexpected command: ${command} ${args.join(" ")}`)
     })
@@ -253,7 +307,7 @@ describe("syncGitPlugin", () => {
     const cloneError = new Error("clone failed")
 
     mockRunCommand.mockImplementation(async ({ args }: RunCommandInput) => {
-      if (args[2] === "clone") throw cloneError
+      if (args.includes("clone")) throw cloneError
       throw new Error(`Unexpected args: ${args.join(" ")}`)
     })
 

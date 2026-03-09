@@ -7,6 +7,7 @@ import { parse as parseJsonc } from "jsonc-parser"
 import type { Logger } from "./log"
 
 const COMMAND_KILL_GRACE_MS = 250
+const COMMAND_OUTPUT_MAX_BYTES = 10 * 1024 * 1024 // 10 MB
 
 export async function exists(filePath: string): Promise<boolean> {
   try {
@@ -61,6 +62,43 @@ export function parseNpmShorthand(value: string): { name: string; version?: stri
   }
 }
 
+export class CappedBuffer {
+  private chunks: Buffer[] = []
+  private totalBytes = 0
+  private droppedBytes = 0
+  private readonly maxBytes: number
+
+  constructor(maxBytes: number) {
+    this.maxBytes = maxBytes
+  }
+
+  append(chunk: Buffer): void {
+    this.totalBytes += chunk.length
+    this.chunks.push(chunk)
+
+    while (this.byteLength() > this.maxBytes && this.chunks.length > 1) {
+      const removed = this.chunks.shift()!
+      this.droppedBytes += removed.length
+    }
+  }
+
+  get truncated(): boolean {
+    return this.droppedBytes > 0
+  }
+
+  private byteLength(): number {
+    let total = 0
+    for (const chunk of this.chunks) total += chunk.length
+    return total
+  }
+
+  toString(): string {
+    const content = Buffer.concat(this.chunks).toString()
+    if (!this.truncated) return content
+    return `[truncated: ${this.droppedBytes} bytes dropped, keeping last ${this.byteLength()} bytes]\n${content}`
+  }
+}
+
 export async function runCommand(input: {
   command: string
   args: string[]
@@ -88,15 +126,15 @@ export async function runCommand(input: {
       stdio: ["ignore", "pipe", "pipe"],
     })
 
-    let stdout = ""
-    let stderr = ""
+    const stdout = new CappedBuffer(COMMAND_OUTPUT_MAX_BYTES)
+    const stderr = new CappedBuffer(COMMAND_OUTPUT_MAX_BYTES)
     let timedOut = false
     let settled = false
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString()
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout.append(chunk)
     })
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString()
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr.append(chunk)
     })
 
     let timer: NodeJS.Timeout | undefined
@@ -138,6 +176,9 @@ export async function runCommand(input: {
       if (killTimer) clearTimeout(killTimer)
       const durationMs = Date.now() - startedAt
 
+      const stdoutStr = stdout.toString()
+      const stderrStr = stderr.toString()
+
       if (code === 0 && !timedOut) {
         logger?.debug("Command completed", {
           command,
@@ -145,14 +186,14 @@ export async function runCommand(input: {
           commandString,
           cwd: cwd ?? process.cwd(),
           durationMs,
-          stdout: stdout.trim() || undefined,
-          stderr: stderr.trim() || undefined,
+          stdout: stdoutStr.trim() || undefined,
+          stderr: stderrStr.trim() || undefined,
         })
-        return resolve({ stdout, stderr })
+        return resolve({ stdout: stdoutStr, stderr: stderrStr })
       }
 
       if (timedOut) {
-        reject(new Error(`${command} ${args.join(" ")} timed out after ${timeout}ms: ${stderr || stdout}`))
+        reject(new Error(`${command} ${args.join(" ")} timed out after ${timeout}ms: ${stderrStr || stdoutStr}`))
         return
       }
 
@@ -163,10 +204,10 @@ export async function runCommand(input: {
         cwd: cwd ?? process.cwd(),
         durationMs,
         exitCode: code,
-        stdout: stdout.trim() || undefined,
-        stderr: stderr.trim() || undefined,
+        stdout: stdoutStr.trim() || undefined,
+        stderr: stderrStr.trim() || undefined,
       })
-      reject(new Error(`${command} ${args.join(" ")} failed with exit code ${code}: ${stderr || stdout}`))
+      reject(new Error(`${command} ${args.join(" ")} failed with exit code ${code}: ${stderrStr || stdoutStr}`))
     })
   })
 }

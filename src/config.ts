@@ -2,7 +2,7 @@ import type { PluginInput as RuntimePluginInput } from "@opencode-ai/plugin"
 import path from "node:path"
 import { createConsoleLogger, type Logger } from "./log"
 import { PluginsFileSchema, type ManagedPluginSpec, type NormalizedPluginSpec, type PluginsFile } from "./types"
-import { exists, expandHome, fs, normalizeGitRepo, os, parseNpmShorthand, readJsoncFile } from "./config.deps"
+import { exists, expandHome, normalizeGitRepo, os, parseNpmShorthand, readJsoncFile } from "./config.deps"
 
 const CONFIG_FILENAMES = ["plugins.json", "plugins.jsonc"]
 
@@ -149,7 +149,3 @@ async function discoverConfigFiles(): Promise<string[]> {
   return deduped
 }
 
-export async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true })
-  await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8")
-}

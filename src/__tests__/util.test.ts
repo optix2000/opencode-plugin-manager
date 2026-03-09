@@ -5,7 +5,7 @@ import os from "node:os"
 import { randomUUID } from "node:crypto"
 
 // We test the pure functions directly — they don't need mocking
-import { expandHome, sanitizeSegment, normalizeGitRepo, parseNpmShorthand, sha256File } from "../util"
+import { CappedBuffer, expandHome, sanitizeSegment, normalizeGitRepo, parseNpmShorthand, sha256File } from "../util"
 
 describe("parseNpmShorthand", () => {
   test("splits name and version on last @", () => {
@@ -114,6 +114,57 @@ describe("sha256File", () => {
     } finally {
       await fs.rm(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe("CappedBuffer", () => {
+  test("returns full content when under the cap", () => {
+    const buf = new CappedBuffer(1024)
+    buf.append(Buffer.from("hello "))
+    buf.append(Buffer.from("world"))
+    expect(buf.toString()).toBe("hello world")
+    expect(buf.truncated).toBe(false)
+  })
+
+  test("truncates early chunks and keeps the tail when over the cap", () => {
+    const buf = new CappedBuffer(10)
+    buf.append(Buffer.from("aaaa")) // 4 bytes
+    buf.append(Buffer.from("bbbb")) // 4 bytes, total 8
+    buf.append(Buffer.from("cccc")) // 4 bytes, total 12 -> drops "aaaa"
+    expect(buf.truncated).toBe(true)
+    const result = buf.toString()
+    expect(result).toContain("bbbbcccc")
+    expect(result).toContain("[truncated: 4 bytes dropped")
+    expect(result).not.toContain("aaaa")
+  })
+
+  test("handles single chunk exceeding the cap", () => {
+    const buf = new CappedBuffer(5)
+    buf.append(Buffer.from("abcdefghij")) // 10 bytes, single chunk can't be split
+    // Single chunk is kept even if over cap (nothing to drop)
+    expect(buf.truncated).toBe(false)
+    expect(buf.toString()).toBe("abcdefghij")
+  })
+
+  test("drops multiple early chunks to get under the cap", () => {
+    const buf = new CappedBuffer(6)
+    buf.append(Buffer.from("aa")) // 2
+    buf.append(Buffer.from("bb")) // 4
+    buf.append(Buffer.from("cc")) // 6
+    buf.append(Buffer.from("dd")) // 8 -> drops "aa" -> 6
+    expect(buf.truncated).toBe(true)
+    expect(buf.toString()).toContain("bbccdd")
+
+    buf.append(Buffer.from("ee")) // 8 -> drops "bb" -> 6
+    const result = buf.toString()
+    expect(result).toContain("ccddee")
+    expect(result).toContain("[truncated: 4 bytes dropped")
+  })
+
+  test("empty buffer returns empty string", () => {
+    const buf = new CappedBuffer(100)
+    expect(buf.toString()).toBe("")
+    expect(buf.truncated).toBe(false)
   })
 })
 
