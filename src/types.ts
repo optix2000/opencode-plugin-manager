@@ -21,14 +21,14 @@ export const CACHEABLE_LOCK_ENTRY_SOURCES = LOCK_ENTRY_SOURCES.filter(
 export const BuildSchema = z.object({
   command: z.string().min(1),
   timeout: z.number().int().positive().max(300_000).default(BUILD_COMMAND_TIMEOUT_MS),
-})
+}).strict()
 
 const NpmPluginSchema = z.object({
   source: z.literal("npm"),
   name: z.string().min(1),
   version: z.string().min(1).optional(),
   entry: z.string().min(1).optional(),
-})
+}).strict()
 
 const GitPluginSchema = z.object({
   source: z.literal("git"),
@@ -36,14 +36,14 @@ const GitPluginSchema = z.object({
   ref: z.string().min(1).optional(),
   entry: z.string().min(1).optional(),
   build: BuildSchema.optional(),
-})
+}).strict()
 
 const LocalPluginSchema = z.object({
   source: z.literal("local"),
   path: z.string().min(1),
   entry: z.string().min(1).optional(),
   build: BuildSchema.optional(),
-})
+}).strict()
 
 export const PluginInputSchema = z.union([
   z.string().min(1),
@@ -54,8 +54,8 @@ export const PluginInputSchema = z.union([
 
 export const PluginsFileSchema = z.object({
   cacheDir: z.string().min(1).optional(),
-  plugins: z.array(PluginInputSchema).default([]),
-})
+  plugins: z.array(PluginInputSchema),
+}).strict()
 
 export type PluginInput = z.infer<typeof PluginInputSchema>
 export type PluginsFile = z.infer<typeof PluginsFileSchema>

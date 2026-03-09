@@ -224,6 +224,50 @@ describe("loadMergedConfig", () => {
     }
   })
 
+  test("rejects config files with unknown top-level keys", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON])
+    setConfigFiles({
+      [GLOBAL_CONFIG_JSON]: {
+        plugin: ["ok@1.0"],
+      },
+    })
+
+    const originalWarn = console.warn
+    const warn = mock((..._args: unknown[]) => undefined)
+    console.warn = warn as typeof console.warn
+
+    try {
+      const result = await loadMergedConfig(input("/repo", "/repo/subdir"))
+      expect(result.plugins).toEqual([])
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0]?.[0])).toContain(`Invalid config at ${path.resolve(GLOBAL_CONFIG_JSON)}`)
+    } finally {
+      console.warn = originalWarn
+    }
+  })
+
+  test("rejects plugin entries with unknown keys", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON])
+    setConfigFiles({
+      [GLOBAL_CONFIG_JSON]: {
+        plugins: [{ source: "npm", name: "ok", versoin: "1.0" }],
+      },
+    })
+
+    const originalWarn = console.warn
+    const warn = mock((..._args: unknown[]) => undefined)
+    console.warn = warn as typeof console.warn
+
+    try {
+      const result = await loadMergedConfig(input("/repo", "/repo/subdir"))
+      expect(result.plugins).toEqual([])
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0]?.[0])).toContain(`Invalid config at ${path.resolve(GLOBAL_CONFIG_JSON)}`)
+    } finally {
+      console.warn = originalWarn
+    }
+  })
+
   test("uses cacheDir from the last parsed global file", async () => {
     setExistingFiles([GLOBAL_CONFIG_JSON, GLOBAL_CONFIG_JSONC])
     setConfigFiles({
