@@ -1,7 +1,7 @@
 import path from "node:path"
 import type { Logger } from "../log"
 import type { LockEntry, ManagedPluginSpec } from "../types"
-import { fs, resolvePluginEntry, runCommand } from "./local.deps"
+import { fs, resolvePluginEntry, runCommand, sha256File } from "./local.deps"
 
 type LocalSpec = Extract<ManagedPluginSpec, { source: "local" }>
 
@@ -38,6 +38,7 @@ export async function syncLocalPlugin(spec: LocalSpec, logger: Logger): Promise<
   }
 
   const resolvedPath = stat.isDirectory() ? await resolvePluginEntry(pluginPath, spec.entry) : pluginPath
+  const integrity = await sha256File(resolvedPath)
 
   logger.info("Local plugin synced", {
     pluginID: spec.id,
@@ -50,6 +51,7 @@ export async function syncLocalPlugin(spec: LocalSpec, logger: Logger): Promise<
     path: pluginPath,
     entry: spec.entry,
     resolvedPath,
+    integrity,
     updatedAt: new Date().toISOString(),
   }
 }

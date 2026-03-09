@@ -1,9 +1,11 @@
 import { afterAll, describe, test, expect, mock, beforeEach } from "bun:test"
+import fs from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
+import { randomUUID } from "node:crypto"
 
 // We test the pure functions directly — they don't need mocking
-import { expandHome, sanitizeSegment, normalizeGitRepo, parseNpmShorthand } from "../util"
+import { expandHome, sanitizeSegment, normalizeGitRepo, parseNpmShorthand, sha256File } from "../util"
 
 describe("parseNpmShorthand", () => {
   test("splits name and version on last @", () => {
@@ -77,6 +79,41 @@ describe("normalizeGitRepo", () => {
 
   test("only strips trailing .git", () => {
     expect(normalizeGitRepo("https://github.com/.git/bar")).toBe("https://github.com/.git/bar")
+  })
+})
+
+describe("sha256File", () => {
+  test("returns sha256-prefixed hash for file content", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opm-util-test-"))
+    const filePath = path.join(dir, `${randomUUID()}.txt`)
+
+    try {
+      await fs.writeFile(filePath, "hello world", "utf8")
+
+      const hash = await sha256File(filePath)
+      expect(hash).toBe("sha256:b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("changes when file contents change", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opm-util-test-"))
+    const filePath = path.join(dir, `${randomUUID()}.txt`)
+
+    try {
+      await fs.writeFile(filePath, "first", "utf8")
+      const firstHash = await sha256File(filePath)
+
+      await fs.writeFile(filePath, "second", "utf8")
+      const secondHash = await sha256File(filePath)
+
+      expect(firstHash).toMatch(/^sha256:/)
+      expect(secondHash).toMatch(/^sha256:/)
+      expect(secondHash).not.toBe(firstHash)
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true })
+    }
   })
 })
 

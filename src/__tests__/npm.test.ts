@@ -23,6 +23,7 @@ const mockMoveExtractedDirIntoPlace = mock(async (args: MoveArgs) => {
   await args.validateExistingDir(args.targetDir)
 })
 const mockResolvePluginEntry = mock(async (packageDir: string, entry?: string) => path.join(packageDir, entry ?? "index.js"))
+const mockSha256File = mock()
 
 const mockNpmInstallDir = mock()
 
@@ -38,6 +39,7 @@ mock.module("../sources/npm.deps", () => ({
   exists: mockExists,
   moveExtractedDirIntoPlace: mockMoveExtractedDirIntoPlace,
   resolvePluginEntry: mockResolvePluginEntry,
+  sha256File: mockSha256File,
   npmInstallDir: mockNpmInstallDir,
 }))
 
@@ -92,6 +94,7 @@ beforeEach(() => {
     mockExists,
     mockMoveExtractedDirIntoPlace,
     mockResolvePluginEntry,
+    mockSha256File,
     mockNpmInstallDir,
   ]) {
     fn.mockReset()
@@ -113,6 +116,7 @@ beforeEach(() => {
     path.join(packageDir, entry ?? "index.js"),
   )
   mockNpmInstallDir.mockImplementation((_cache: unknown, name: string, version: string) => `/cache/npm/${name}@${version}`)
+  mockSha256File.mockResolvedValue("sha256:npm-integrity")
 })
 
 describe("syncNpmPlugin", () => {
@@ -146,6 +150,13 @@ describe("syncNpmPlugin", () => {
       timeout: expect.any(Number),
       logger: TEST_LOGGER,
     })
+  })
+
+  test("records integrity from resolved plugin entry file", async () => {
+    const result = await sync()
+
+    expect(mockSha256File).toHaveBeenCalledWith(result.resolvedPath)
+    expect(result.integrity).toBe("sha256:npm-integrity")
   })
 
   describe("package version resolution", () => {

@@ -10,6 +10,7 @@ import {
   moveExtractedDirIntoPlace,
   resolvePluginEntry,
   runCommand,
+  sha256File,
 } from "./git.deps"
 
 type GitSpec = Extract<ManagedPluginSpec, { source: "git" }>
@@ -84,6 +85,7 @@ export async function syncGitPlugin(
     })
 
     const resolvedPath = await resolvePluginEntry(targetDir, spec.entry)
+    const integrity = await sha256File(resolvedPath)
     logger.info("Git plugin synced", {
       pluginID: spec.id,
       commit,
@@ -97,6 +99,7 @@ export async function syncGitPlugin(
       ref: spec.ref,
       commit,
       resolvedPath,
+      integrity,
       updatedAt: new Date().toISOString(),
     }
   } finally {

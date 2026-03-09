@@ -13,6 +13,7 @@ const mockExists = mock()
 
 const mockMoveExtractedDirIntoPlace = mock()
 const mockResolvePluginEntry = mock()
+const mockSha256File = mock()
 
 const mockGitInstallDir = mock()
 
@@ -26,6 +27,7 @@ mock.module("../sources/git.deps", () => ({
   exists: mockExists,
   moveExtractedDirIntoPlace: mockMoveExtractedDirIntoPlace,
   resolvePluginEntry: mockResolvePluginEntry,
+  sha256File: mockSha256File,
   gitInstallDir: mockGitInstallDir,
 }))
 
@@ -78,6 +80,7 @@ beforeEach(() => {
   mockExists.mockReset()
   mockMoveExtractedDirIntoPlace.mockReset()
   mockResolvePluginEntry.mockReset()
+  mockSha256File.mockReset()
   mockGitInstallDir.mockReset()
 
   mockFsMkdtemp.mockResolvedValue(TEMP_DIR)
@@ -87,6 +90,7 @@ beforeEach(() => {
   mockExists.mockResolvedValue(true)
   mockMoveExtractedDirIntoPlace.mockResolvedValue(undefined)
   mockResolvePluginEntry.mockResolvedValue(RESOLVED_PATH)
+  mockSha256File.mockResolvedValue("sha256:git-integrity")
   mockGitInstallDir.mockReturnValue(TARGET_DIR)
 })
 
@@ -138,6 +142,7 @@ describe("syncGitPlugin", () => {
       }),
     )
     expect(mockResolvePluginEntry).toHaveBeenCalledWith(TARGET_DIR, spec.entry)
+    expect(mockSha256File).toHaveBeenCalledWith(RESOLVED_PATH)
 
     expect(result).toEqual({
       id: spec.id,
@@ -146,6 +151,7 @@ describe("syncGitPlugin", () => {
       ref: undefined,
       commit: COMMIT,
       resolvedPath: RESOLVED_PATH,
+      integrity: "sha256:git-integrity",
       updatedAt: expect.any(String),
     })
     expect(Number.isNaN(Date.parse(result.updatedAt))).toBe(false)

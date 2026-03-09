@@ -6,6 +6,7 @@ import { makeSpec } from "./helpers"
 const mockFsStat = mock()
 const mockRunCommand = mock(async (_args: unknown) => ({ stdout: "", stderr: "" }))
 const mockResolvePluginEntry = mock(async (pluginPath: string, entry?: string) => path.join(pluginPath, entry ?? "index.js"))
+const mockSha256File = mock()
 
 mock.module("../sources/local.deps", () => ({
   fs: {
@@ -13,6 +14,7 @@ mock.module("../sources/local.deps", () => ({
   },
   runCommand: mockRunCommand,
   resolvePluginEntry: mockResolvePluginEntry,
+  sha256File: mockSha256File,
 }))
 
 const { syncLocalPlugin } = await import("../sources/local")
@@ -35,11 +37,13 @@ beforeEach(() => {
   mockFsStat.mockReset()
   mockRunCommand.mockReset()
   mockResolvePluginEntry.mockReset()
+  mockSha256File.mockReset()
 
   mockRunCommand.mockResolvedValue({ stdout: "", stderr: "" })
   mockResolvePluginEntry.mockImplementation(async (pluginPath: string, entry?: string) =>
     path.join(pluginPath, entry ?? "index.js"),
   )
+  mockSha256File.mockResolvedValue("sha256:local-integrity")
 })
 
 describe("syncLocalPlugin", () => {
@@ -67,7 +71,9 @@ describe("syncLocalPlugin", () => {
       path: resolvedPluginPath,
       entry: "dist/plugin.js",
       resolvedPath: resolvedEntry,
+      integrity: "sha256:local-integrity",
     })
+    expect(mockSha256File).toHaveBeenCalledWith(resolvedEntry)
     expect(Number.isNaN(Date.parse(result.updatedAt))).toBe(false)
   })
 
@@ -90,7 +96,9 @@ describe("syncLocalPlugin", () => {
       path: resolvedPluginPath,
       entry: undefined,
       resolvedPath: resolvedPluginPath,
+      integrity: "sha256:local-integrity",
     })
+    expect(mockSha256File).toHaveBeenCalledWith(resolvedPluginPath)
     expect(Number.isNaN(Date.parse(result.updatedAt))).toBe(false)
   })
 

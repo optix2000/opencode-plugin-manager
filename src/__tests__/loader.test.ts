@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import { makeCacheContext, makeLockEntry } from "./helpers"
 
 const mockIsTrustedLockEntryPath = mock()
+const mockSha256File = mock()
 
 mock.module("../loader.deps", () => ({
   isTrustedLockEntryPath: mockIsTrustedLockEntryPath,
+  sha256File: mockSha256File,
 }))
 
 const { loadManagedPlugins, mergeManagedHooks } = await import("../loader")
@@ -20,6 +22,8 @@ function warningMessages(): string[] {
 beforeEach(() => {
   mockIsTrustedLockEntryPath.mockReset()
   mockIsTrustedLockEntryPath.mockResolvedValue(true)
+  mockSha256File.mockReset()
+  mockSha256File.mockResolvedValue("sha256:matching")
 
   warnSpy.mockReset()
   originalWarn = console.warn
@@ -274,6 +278,24 @@ describe("loadManagedPlugins", () => {
       ),
     ).toBe(true)
     expect(warningMessages().some((message) => message.includes("Failed to load npm:untrusted"))).toBe(false)
+    expect(mockSha256File).not.toHaveBeenCalled()
+  })
+
+  test("skips entries when integrity does not match", async () => {
+    const cache = makeCacheContext("/cache")
+    const entry = makeLockEntry("npm", {
+      id: "npm:integrity-mismatch",
+      resolvedPath: "/virtual/plugins/integrity-mismatch.js",
+      integrity: "sha256:expected",
+    })
+    mockSha256File.mockResolvedValue("sha256:actual")
+
+    const loaded = await loadManagedPlugins([entry], {} as any, cache)
+
+    expect(loaded).toEqual([])
+    expect(mockSha256File).toHaveBeenCalledWith(entry.resolvedPath)
+    expect(warningMessages().some((message) => message.includes("Skipping plugin with integrity mismatch for npm:integrity-mismatch"))).toBe(true)
+    expect(warningMessages().some((message) => message.includes("Failed to load npm:integrity-mismatch"))).toBe(false)
   })
 
   test("warns and excludes trusted entry when dynamic import fails", async () => {

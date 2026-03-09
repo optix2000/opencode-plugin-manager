@@ -10,6 +10,7 @@ import {
   npmInstallDir,
   resolvePluginEntry,
   runCommand,
+  sha256File,
 } from "./npm.deps"
 
 type NpmSpec = Extract<ManagedPluginSpec, { source: "npm" }>
@@ -75,6 +76,7 @@ export async function syncNpmPlugin(
 
     const packageDir = path.join(targetDir, "node_modules", spec.name)
     const resolvedPath = await resolvePluginEntry(packageDir, spec.entry)
+    const integrity = await sha256File(resolvedPath)
 
     logger.info("Npm plugin synced", {
       pluginID: spec.id,
@@ -91,6 +93,7 @@ export async function syncNpmPlugin(
       requestedVersion: spec.version ?? options.lockedVersion,
       resolvedVersion,
       resolvedPath,
+      integrity,
       updatedAt: new Date().toISOString(),
     }
   } finally {

@@ -2,7 +2,7 @@ import type { Hooks, Plugin as PluginFactory, PluginInput } from "@opencode-ai/p
 import { pathToFileURL } from "node:url"
 import type { CacheContext } from "./cache"
 import { createConsoleLogger, type Logger } from "./log"
-import { isTrustedLockEntryPath } from "./loader.deps"
+import { isTrustedLockEntryPath, sha256File } from "./loader.deps"
 import type { LockEntry } from "./types"
 import { sanitizeToolName } from "./util"
 
@@ -53,6 +53,20 @@ export async function loadManagedPlugins(
         })
         return undefined
       }
+
+      if (entry.integrity) {
+        const actualIntegrity = await sha256File(entry.resolvedPath).catch(() => undefined)
+        if (actualIntegrity !== entry.integrity) {
+          logger.warn(`[plugin-manager] Skipping plugin with integrity mismatch for ${entry.id}: ${entry.resolvedPath}`, {
+            pluginID: entry.id,
+            resolvedPath: entry.resolvedPath,
+            expectedIntegrity: entry.integrity,
+            actualIntegrity,
+          })
+          return undefined
+        }
+      }
+
       const moduleUrl = moduleUrlForEntry(entry, options)
       logger.debug("Loading managed plugin module", {
         pluginID: entry.id,
