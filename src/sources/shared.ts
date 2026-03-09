@@ -2,6 +2,7 @@ import path from "node:path"
 import { exists, fs } from "./shared.deps"
 
 const DEFAULT_ENTRYPOINT = "opencode.plugin.ts"
+const EXPORT_CONDITION_PRIORITY = ["bun", "import", "default", "node", "require"] as const
 
 export async function resolvePluginEntry(rootDir: string, explicitEntry?: string): Promise<string> {
   if (explicitEntry) {
@@ -21,12 +22,12 @@ export async function resolvePluginEntry(rootDir: string, explicitEntry?: string
   if (await exists(pkgPath)) {
     try {
       const pkg = JSON.parse(await fs.readFile(pkgPath, "utf8")) as {
-        exports?: string | Record<string, unknown>
+        exports?: unknown
         module?: string
         main?: string
       }
-      const exportCandidate = resolveExports(pkg.exports)
-      const candidates = [exportCandidate, pkg.module, pkg.main, "index.js", "dist/index.js"].filter(
+      const exportCandidates = resolveExports(pkg.exports)
+      const candidates = [...exportCandidates, pkg.module, pkg.main, "index.js", "dist/index.js"].filter(
         (value): value is string => Boolean(value),
       )
 
@@ -104,22 +105,56 @@ function isExistingDirectoryError(error: unknown): boolean {
   return code === "EEXIST" || code === "ENOTEMPTY"
 }
 
-function resolveExports(value: unknown): string | undefined {
-  if (typeof value === "string") return value
-  if (!value || typeof value !== "object") return undefined
+function resolveExports(value: unknown): string[] {
+  return resolveExportCandidates(value, true)
+}
 
-  const asRecord = value as Record<string, unknown>
-  const dot = asRecord["."]
-  if (typeof dot === "string") return dot
-  if (dot && typeof dot === "object") {
-    const module = (dot as Record<string, unknown>).import
-    if (typeof module === "string") return module
+function resolveExportCandidates(value: unknown, rootLevel = false): string[] {
+  if (typeof value === "string") return [value]
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => resolveExportCandidates(item, false))
   }
 
-  const directImport = asRecord.import
-  if (typeof directImport === "string") return directImport
+  if (!isRecord(value)) {
+    return []
+  }
 
-  return undefined
+  if (rootLevel) {
+    if (Object.hasOwn(value, ".")) {
+      return resolveExportCandidates(value["."], false)
+    }
+
+    if (Object.keys(value).some((key) => key.startsWith("."))) {
+      return []
+    }
+  }
+
+  const resolved: string[] = []
+  const addResolved = (candidate: unknown): void => {
+    for (const item of resolveExportCandidates(candidate, false)) {
+      if (!resolved.includes(item)) {
+        resolved.push(item)
+      }
+    }
+  }
+
+  for (const condition of EXPORT_CONDITION_PRIORITY) {
+    addResolved(value[condition])
+  }
+
+  for (const [condition, candidate] of Object.entries(value)) {
+    if (EXPORT_CONDITION_PRIORITY.includes(condition as (typeof EXPORT_CONDITION_PRIORITY)[number])) {
+      continue
+    }
+    addResolved(candidate)
+  }
+
+  return resolved
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
 
 export function resolveInside(rootDir: string, relativePath: string): string {

@@ -122,14 +122,90 @@ describe("resolvePluginEntry", () => {
     await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(entry)
   })
 
-  test("falls through from unsupported exports shape to module/main", async () => {
+  test("uses package exports dot-default candidate", async () => {
+    const pkgPath = path.join(ROOT_DIR, "package.json")
+    const entry = path.resolve(ROOT_DIR, "./default.js")
+    setExistingPaths([pkgPath, entry])
+    mockFsReadFile.mockResolvedValue(JSON.stringify({ exports: { ".": { default: "./default.js" } } }))
+
+    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(entry)
+  })
+
+  test("uses package exports dot-node candidate", async () => {
+    const pkgPath = path.join(ROOT_DIR, "package.json")
+    const entry = path.resolve(ROOT_DIR, "./node.js")
+    setExistingPaths([pkgPath, entry])
+    mockFsReadFile.mockResolvedValue(JSON.stringify({ exports: { ".": { node: "./node.js" } } }))
+
+    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(entry)
+  })
+
+  test("uses package exports dot-require candidate", async () => {
+    const pkgPath = path.join(ROOT_DIR, "package.json")
+    const entry = path.resolve(ROOT_DIR, "./require.cjs")
+    setExistingPaths([pkgPath, entry])
+    mockFsReadFile.mockResolvedValue(JSON.stringify({ exports: { ".": { require: "./require.cjs" } } }))
+
+    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(entry)
+  })
+
+  test("prefers bun condition over import/default", async () => {
+    const pkgPath = path.join(ROOT_DIR, "package.json")
+    const bunEntry = path.resolve(ROOT_DIR, "./bun.js")
+    const importEntry = path.resolve(ROOT_DIR, "./import.js")
+    const defaultEntry = path.resolve(ROOT_DIR, "./default.js")
+    setExistingPaths([pkgPath, bunEntry, importEntry, defaultEntry])
+    mockFsReadFile.mockResolvedValue(
+      JSON.stringify({
+        exports: {
+          ".": {
+            default: "./default.js",
+            import: "./import.js",
+            bun: "./bun.js",
+          },
+        },
+      }),
+    )
+
+    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(bunEntry)
+  })
+
+  test("uses nested bun-import condition candidate", async () => {
+    const pkgPath = path.join(ROOT_DIR, "package.json")
+    const bunEntry = path.resolve(ROOT_DIR, "./bun.mjs")
+    const importEntry = path.resolve(ROOT_DIR, "./index.js")
+    setExistingPaths([pkgPath, bunEntry, importEntry])
+    mockFsReadFile.mockResolvedValue(
+      JSON.stringify({
+        exports: {
+          ".": {
+            bun: { import: "./bun.mjs" },
+            import: "./index.js",
+          },
+        },
+      }),
+    )
+
+    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(bunEntry)
+  })
+
+  test("uses package exports array fallback candidates", async () => {
+    const pkgPath = path.join(ROOT_DIR, "package.json")
+    const fallbackEntry = path.resolve(ROOT_DIR, "./fallback.js")
+    setExistingPaths([pkgPath, fallbackEntry])
+    mockFsReadFile.mockResolvedValue(JSON.stringify({ exports: ["./missing.js", "./fallback.js"] }))
+
+    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(fallbackEntry)
+  })
+
+  test("falls through from unsupported subpath exports to module/main", async () => {
     const pkgPath = path.join(ROOT_DIR, "package.json")
     const moduleEntry = path.resolve(ROOT_DIR, "./module.js")
     const mainEntry = path.resolve(ROOT_DIR, "./main.js")
     setExistingPaths([pkgPath, moduleEntry, mainEntry])
     mockFsReadFile.mockResolvedValue(
       JSON.stringify({
-        exports: { ".": { default: "x.js" } },
+        exports: { "./feature": "./feature.js" },
         module: "./module.js",
         main: "./main.js",
       }),
