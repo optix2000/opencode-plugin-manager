@@ -206,17 +206,6 @@ async function unlinkIfPresent(targetPath: string): Promise<boolean> {
   }
 }
 
-export async function listResolvedEntries(cache: CacheContext, lockfile: Lockfile): Promise<LockEntry[]> {
-  const entries = Object.values(lockfile.plugins)
-  const existing: LockEntry[] = []
-  for (const entry of entries) {
-    if (await isTrustedLockEntryPath(cache, entry)) {
-      existing.push(entry)
-    }
-  }
-  return existing
-}
-
 export async function isTrustedLockEntryPath(cache: CacheContext, entry: LockEntry): Promise<boolean> {
   if (!(await exists(entry.resolvedPath))) return false
 

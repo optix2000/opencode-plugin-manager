@@ -84,10 +84,11 @@ function normalizePlugin(plugin: PluginsFile["plugins"][number], fromFile: strin
   }
 
   if (normalized.source === "git") {
+    const normalizedRepo = normalizeGitRepo(normalized.repo)
     return {
       ...normalized,
-      repo: normalizeGitRepo(normalized.repo),
-      id: `git:${normalizeGitRepo(normalized.repo)}`,
+      repo: normalizedRepo,
+      id: `git:${normalizedRepo}`,
       fromFile,
     }
   }
@@ -107,13 +108,7 @@ function normalizePlugin(plugin: PluginsFile["plugins"][number], fromFile: strin
 }
 
 function isLocalPathShorthand(value: string): boolean {
-  return (
-    value.startsWith("./") ||
-    value.startsWith("../") ||
-    value.startsWith("~/") ||
-    value.startsWith("/") ||
-    path.isAbsolute(value)
-  )
+  return value.startsWith("./") || value.startsWith("../") || value.startsWith("~/") || path.isAbsolute(value)
 }
 
 function resolveLocalPath(value: string, fromFile: string): string {
@@ -137,15 +132,10 @@ async function parseConfigFile(filePath: string, logger: Logger): Promise<Plugin
 
 async function discoverConfigFiles(): Promise<string[]> {
   const candidates = CONFIG_FILENAMES.map((file) => path.join(os.homedir(), ".config", "opencode", file))
-
-  const deduped: string[] = []
-  const seen = new Set<string>()
+  const existing: string[] = []
   for (const candidate of candidates) {
     const normalized = path.resolve(candidate)
-    if (seen.has(normalized)) continue
-    seen.add(normalized)
-    if (await exists(normalized)) deduped.push(normalized)
+    if (await exists(normalized)) existing.push(normalized)
   }
-  return deduped
+  return existing
 }
-

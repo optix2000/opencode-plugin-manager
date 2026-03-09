@@ -21,10 +21,13 @@ export type LoadManagedPluginsOptions = {
   cacheBustToken?: string
 }
 
-type NonTwoArgHook = "event" | "config" | "tool" | "auth"
-type TwoArgHook = Exclude<keyof Hooks, NonTwoArgHook>
+type FanOutHookKey = {
+  [K in keyof Hooks]-?: NonNullable<Hooks[K]> extends (...args: any[]) => any ? K : never
+}[keyof Hooks]
 
-const TWO_ARG_HOOKS = {
+const FAN_OUT_HOOKS = {
+  event: true,
+  config: true,
   "chat.message": true,
   "chat.params": true,
   "chat.headers": true,
@@ -38,7 +41,7 @@ const TWO_ARG_HOOKS = {
   "experimental.session.compacting": true,
   "experimental.text.complete": true,
   "tool.definition": true,
-} satisfies Record<TwoArgHook, true>
+} satisfies Record<FanOutHookKey, true>
 
 export async function loadManagedPlugins(
   entries: LockEntry[],
@@ -205,33 +208,13 @@ export type MergedManagedHooks = {
 export function mergeManagedHooks(getLoaded: () => LoadedPlugin[], logger: Logger = createConsoleLogger()): MergedManagedHooks {
   const hooks: Hooks = {}
 
-  hooks.event = async (input) => {
-    for (const plugin of getLoaded()) {
-      try {
-        await plugin.hooks.event?.(input)
-      } catch (error) {
-        logger.warn(`[plugin-manager] Hook event failed in ${plugin.id}: ${String(error)}`, { hook: "event", pluginID: plugin.id })
-      }
-    }
-  }
-
-  hooks.config = async (input) => {
-    for (const plugin of getLoaded()) {
-      try {
-        await plugin.hooks.config?.(input)
-      } catch (error) {
-        logger.warn(`[plugin-manager] Hook config failed in ${plugin.id}: ${String(error)}`, { hook: "config", pluginID: plugin.id })
-      }
-    }
-  }
-
-  for (const hookName of Object.keys(TWO_ARG_HOOKS) as TwoArgHook[]) {
-    const fn = async (input: unknown, output: unknown) => {
+  for (const hookName of Object.keys(FAN_OUT_HOOKS) as FanOutHookKey[]) {
+    const fn = async (...args: unknown[]) => {
       for (const plugin of getLoaded()) {
         const hook = plugin.hooks[hookName]
         if (!hook) continue
         try {
-          await (hook as (input: unknown, output: unknown) => Promise<void>)(input, output)
+          await (hook as (...args: unknown[]) => Promise<void>)(...args)
         } catch (error) {
           logger.warn(`[plugin-manager] Hook ${hookName} failed in ${plugin.id}: ${String(error)}`, {
             hook: hookName,
