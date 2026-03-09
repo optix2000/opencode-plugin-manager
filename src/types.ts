@@ -1,6 +1,24 @@
 import { z } from "zod"
 
 export const BUILD_COMMAND_TIMEOUT_MS = 30_000
+
+// SCP-style git address: user@host:path (e.g. git@github.com:user/repo.git)
+// Requires user@ prefix to distinguish from bare URL schemes like "https:foo".
+const SCP_GIT_REGEX = /^[a-zA-Z0-9._+-]+@[a-zA-Z0-9][a-zA-Z0-9._-]*:.+$/
+
+export function isGitRepoUrl(value: string): boolean {
+  try {
+    new URL(value)
+    return true
+  } catch {
+    // Not a standard URL — check SCP-style
+  }
+  return SCP_GIT_REGEX.test(value)
+}
+
+const gitRepoString = z.string().min(1).refine(isGitRepoUrl, {
+  message: "Must be a valid URL or SCP-style git address (e.g. git@github.com:user/repo.git)",
+})
 export const LOCK_ENTRY_SOURCES = ["npm", "git", "local"] as const
 export type LockEntrySource = (typeof LOCK_ENTRY_SOURCES)[number]
 
@@ -34,7 +52,7 @@ const NpmPluginSchema = z.object({
 
 const GitPluginSchema = z.object({
   source: z.literal("git"),
-  repo: z.string().url(),
+  repo: gitRepoString,
   ref: z.string().min(1).optional(),
   entry: z.string().min(1).optional(),
   build: BuildSchema.optional(),
@@ -57,6 +75,12 @@ export const PluginInputSchema = z.union([
 export const PluginsFileSchema = z.object({
   cacheDir: z.string().min(1).optional(),
   plugins: z.array(PluginInputSchema),
+})
+
+/** Loose schema that validates file structure without validating individual plugin entries. */
+export const PluginsFileStructureSchema = z.object({
+  cacheDir: z.string().min(1).optional(),
+  plugins: z.array(z.unknown()),
 })
 
 export type PluginInput = z.infer<typeof PluginInputSchema>
@@ -104,7 +128,7 @@ const NpmLockEntrySchema = LockEntryBaseSchema.extend({
 
 const GitLockEntrySchema = LockEntryBaseSchema.extend({
   source: z.literal("git"),
-  repo: z.string().url(),
+  repo: gitRepoString,
   ref: z.string().min(1).optional(),
   commit: z.string().min(1),
 })

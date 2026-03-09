@@ -1,7 +1,7 @@
 import type { PluginInput as RuntimePluginInput } from "@opencode-ai/plugin"
 import path from "node:path"
 import { createConsoleLogger, type Logger } from "./log"
-import { PluginsFileSchema, type ManagedPluginSpec, type NormalizedPluginSpec, type PluginsFile } from "./types"
+import { PluginInputSchema, PluginsFileStructureSchema, type ManagedPluginSpec, type NormalizedPluginSpec, type PluginInput, type PluginsFile } from "./types"
 import { exists, expandHome, normalizeGitRepo, os, parseNpmShorthand, readJsoncFile } from "./config.deps"
 
 const CONFIG_FILENAMES = ["plugins.json", "plugins.jsonc"]
@@ -119,15 +119,35 @@ function resolveLocalPath(value: string, fromFile: string): string {
 async function parseConfigFile(filePath: string, logger: Logger): Promise<PluginsFile | null> {
   const raw = await readJsoncFile<unknown>(filePath)
   if (!raw) return null
-  const parsed = PluginsFileSchema.safeParse(raw)
-  if (!parsed.success) {
-    logger.warn(`[plugin-manager] Invalid config at ${filePath}: ${parsed.error.message}`, {
+
+  // Validate file structure (top-level keys) without validating individual entries
+  const structure = PluginsFileStructureSchema.safeParse(raw)
+  if (!structure.success) {
+    logger.warn(`[plugin-manager] Invalid config at ${filePath}: ${structure.error.message}`, {
       filePath,
-      error: parsed.error.message,
+      error: structure.error.message,
     })
     return null
   }
-  return parsed.data
+
+  // Validate each plugin entry individually so one bad entry doesn't reject the whole file
+  const validPlugins: PluginInput[] = []
+  for (const [index, entry] of structure.data.plugins.entries()) {
+    const parsed = PluginInputSchema.safeParse(entry)
+    if (parsed.success) {
+      validPlugins.push(parsed.data)
+    } else {
+      logger.warn(
+        `[plugin-manager] Skipping invalid plugin at index ${index} in ${filePath}: ${parsed.error.message}`,
+        { filePath, index, error: parsed.error.message },
+      )
+    }
+  }
+
+  return {
+    cacheDir: structure.data.cacheDir,
+    plugins: validPlugins,
+  }
 }
 
 async function discoverConfigFiles(): Promise<string[]> {

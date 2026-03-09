@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto"
 
 // We test the pure functions directly — they don't need mocking
 import { CappedBuffer, expandHome, sanitizeSegment, normalizeGitRepo, parseNpmShorthand, sha256File } from "../util"
+import { isGitRepoUrl } from "../types"
 
 describe("parseNpmShorthand", () => {
   test("splits name and version on last @", () => {
@@ -79,6 +80,60 @@ describe("normalizeGitRepo", () => {
 
   test("only strips trailing .git", () => {
     expect(normalizeGitRepo("https://github.com/.git/bar")).toBe("https://github.com/.git/bar")
+  })
+
+  test("strips .git suffix from SCP-style addresses", () => {
+    expect(normalizeGitRepo("git@github.com:user/repo.git")).toBe("git@github.com:user/repo")
+  })
+
+  test("passes through clean SCP-style addresses", () => {
+    expect(normalizeGitRepo("git@github.com:user/repo")).toBe("git@github.com:user/repo")
+  })
+})
+
+describe("isGitRepoUrl", () => {
+  test("accepts HTTPS URLs", () => {
+    expect(isGitRepoUrl("https://github.com/user/repo.git")).toBe(true)
+    expect(isGitRepoUrl("https://github.com/user/repo")).toBe(true)
+  })
+
+  test("accepts SSH URLs", () => {
+    expect(isGitRepoUrl("ssh://git@github.com/user/repo.git")).toBe(true)
+  })
+
+  test("accepts git protocol URLs", () => {
+    expect(isGitRepoUrl("git://github.com/user/repo.git")).toBe(true)
+  })
+
+  test("accepts file URLs", () => {
+    expect(isGitRepoUrl("file:///path/to/repo")).toBe(true)
+  })
+
+  test("accepts SCP-style addresses with user@host:path", () => {
+    expect(isGitRepoUrl("git@github.com:user/repo.git")).toBe(true)
+    expect(isGitRepoUrl("git@gitlab.example.com:org/project.git")).toBe(true)
+    expect(isGitRepoUrl("deploy@myhost:repos/project")).toBe(true)
+  })
+
+  test("accepts SCP-style addresses with IP hosts", () => {
+    expect(isGitRepoUrl("git@192.168.1.1:user/repo")).toBe(true)
+  })
+
+  test("rejects bare strings without URL or SCP format", () => {
+    expect(isGitRepoUrl("not-a-url")).toBe(false)
+    expect(isGitRepoUrl("just-a-name")).toBe(false)
+    expect(isGitRepoUrl("")).toBe(false)
+  })
+
+  test("scheme-like strings that parse as valid URLs are accepted", () => {
+    // "https:foo" parses as a valid WHATWG URL (https://foo/), so it passes the URL check.
+    // These would fail at git-clone time, but that's runtime validation, not config validation.
+    expect(isGitRepoUrl("https:foo")).toBe(true)
+  })
+
+  test("rejects strings that are neither valid URLs nor SCP-style", () => {
+    expect(isGitRepoUrl("totally invalid")).toBe(false)
+    expect(isGitRepoUrl(":no-scheme")).toBe(false)
   })
 })
 

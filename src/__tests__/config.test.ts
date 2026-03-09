@@ -179,6 +179,35 @@ describe("loadMergedConfig", () => {
 
   })
 
+  test("accepts SCP-style git repo addresses", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON])
+    setConfigFiles({
+      [GLOBAL_CONFIG_JSON]: {
+        plugins: [
+          { source: "git", repo: "git@github.com:user/repo.git" },
+          { source: "git", repo: "git@gitlab.example.com:org/project.git" },
+        ],
+      },
+    })
+
+    const result = await loadMergedConfig(input("/repo", "/repo"))
+    expect(result.plugins).toHaveLength(2)
+
+    const byId = new Map(result.plugins.map((plugin) => [plugin.id, plugin]))
+
+    expect(byId.get("git:git@github.com:user/repo")).toMatchObject({
+      source: "git",
+      repo: "git@github.com:user/repo",
+      fromFile: path.resolve(GLOBAL_CONFIG_JSON),
+    })
+
+    expect(byId.get("git:git@gitlab.example.com:org/project")).toMatchObject({
+      source: "git",
+      repo: "git@gitlab.example.com:org/project",
+      fromFile: path.resolve(GLOBAL_CONFIG_JSON),
+    })
+  })
+
   test("merges by plugin id and lets plugins.jsonc override plugins.json", async () => {
     setExistingFiles([GLOBAL_CONFIG_JSON, GLOBAL_CONFIG_JSONC])
     setConfigFiles({
@@ -198,7 +227,33 @@ describe("loadMergedConfig", () => {
     })
   })
 
-  test("skips invalid config files and continues with valid ones", async () => {
+  test("skips invalid plugin entries and continues with valid ones in the same file", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON])
+    setConfigFiles({
+      [GLOBAL_CONFIG_JSON]: {
+        plugins: [
+          { source: "git", repo: "not-a-url" },
+          "ok@1.0",
+        ],
+      },
+    })
+
+    const originalWarn = console.warn
+    const warn = mock((..._args: unknown[]) => undefined)
+    console.warn = warn as typeof console.warn
+
+    try {
+      const result = await loadMergedConfig(input("/repo", "/repo/subdir"))
+      expect(result.plugins).toHaveLength(1)
+      expect(result.plugins[0]).toMatchObject({ id: "npm:ok", version: "1.0" })
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0]?.[0])).toContain(`Skipping invalid plugin at index 0 in ${path.resolve(GLOBAL_CONFIG_JSON)}`)
+    } finally {
+      console.warn = originalWarn
+    }
+  })
+
+  test("skips invalid plugin entries across multiple config files", async () => {
     setExistingFiles([GLOBAL_CONFIG_JSON, GLOBAL_CONFIG_JSONC])
     setConfigFiles({
       [GLOBAL_CONFIG_JSON]: {
@@ -218,7 +273,7 @@ describe("loadMergedConfig", () => {
       expect(result.plugins).toHaveLength(1)
       expect(result.plugins[0]).toMatchObject({ id: "npm:ok", version: "1.0" })
       expect(warn).toHaveBeenCalledTimes(1)
-      expect(String(warn.mock.calls[0]?.[0])).toContain(`Invalid config at ${path.resolve(GLOBAL_CONFIG_JSON)}`)
+      expect(String(warn.mock.calls[0]?.[0])).toContain(`Skipping invalid plugin at index 0 in ${path.resolve(GLOBAL_CONFIG_JSON)}`)
     } finally {
       console.warn = originalWarn
     }
@@ -276,7 +331,7 @@ describe("loadMergedConfig", () => {
       const result = await loadMergedConfig(input("/repo", "/repo/subdir"))
       expect(result.plugins).toEqual([])
       expect(warn).toHaveBeenCalledTimes(1)
-      expect(String(warn.mock.calls[0]?.[0])).toContain(`Invalid config at ${path.resolve(GLOBAL_CONFIG_JSON)}`)
+      expect(String(warn.mock.calls[0]?.[0])).toContain(`Skipping invalid plugin at index 0 in ${path.resolve(GLOBAL_CONFIG_JSON)}`)
     } finally {
       console.warn = originalWarn
     }
@@ -320,7 +375,7 @@ describe("loadMergedConfig", () => {
         const result = await loadMergedConfig(input("/repo", "/repo/subdir"))
         expect(result.plugins).toEqual([])
         expect(warn).toHaveBeenCalledTimes(1)
-        expect(String(warn.mock.calls[0]?.[0])).toContain(`Invalid config at ${path.resolve(GLOBAL_CONFIG_JSON)}`)
+        expect(String(warn.mock.calls[0]?.[0])).toContain(`Skipping invalid plugin at index 0 in ${path.resolve(GLOBAL_CONFIG_JSON)}`)
       } finally {
         console.warn = originalWarn
       }

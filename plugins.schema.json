@@ -89,7 +89,7 @@
               },
               "repo": {
                 "type": "string",
-                "format": "uri"
+                "description": "Git repository URL or SCP-style address (e.g. git@github.com:user/repo.git)"
               },
               "ref": {
                 "type": "string"
