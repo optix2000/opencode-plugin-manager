@@ -41,48 +41,97 @@ export async function syncPlugins(input: {
     cacheRoot: cache.rootDir,
   })
 
-  for (const spec of specs) {
-    const previous = currentLock.plugins[spec.id]
-    const compatibleLock = previous && isCompatibleLock(spec, previous) ? previous : undefined
-    const trustedCompatibleLock =
-      compatibleLock && (await isTrustedLockEntryPath(cache, compatibleLock)) ? compatibleLock : undefined
+  const settled = await Promise.allSettled(
+    specs.map(async (spec) => {
+      const previous = currentLock.plugins[spec.id]
+      const compatibleLock = previous && isCompatibleLock(spec, previous) ? previous : undefined
 
-    if (mode === "install" && trustedCompatibleLock) {
-      nextPlugins[spec.id] = trustedCompatibleLock
-      reused.push(`${pluginDisplayName(spec)} (cached)`)
-      activeLogger.debug("Reusing trusted cached plugin", {
-        pluginID: spec.id,
-        resolvedPath: trustedCompatibleLock.resolvedPath,
-      })
+      try {
+        const trustedCompatibleLock =
+          compatibleLock && (await isTrustedLockEntryPath(cache, compatibleLock)) ? compatibleLock : undefined
+
+        if (mode === "install" && trustedCompatibleLock) {
+          activeLogger.debug("Reusing trusted cached plugin", {
+            pluginID: spec.id,
+            resolvedPath: trustedCompatibleLock.resolvedPath,
+          })
+          return {
+            entry: trustedCompatibleLock,
+            reused: `${pluginDisplayName(spec)} (cached)`,
+          }
+        }
+
+        const synced = await syncSinglePlugin(spec, cache, compatibleLock, mode, activeLogger)
+        activeLogger.debug("Plugin synced", {
+          pluginID: spec.id,
+          source: spec.source,
+          mode,
+        })
+        return {
+          entry: synced,
+          updated: `${pluginDisplayName(spec)} (${mode})`,
+        }
+      } catch (error) {
+        const warning = `[plugin-manager] Failed to sync ${pluginDisplayName(spec)}: ${String(error)}`
+        activeLogger.warn("Plugin sync failed", {
+          pluginID: spec.id,
+          source: spec.source,
+          mode,
+          error: String(error),
+        })
+
+        if (previous && isCompatibleLock(spec, previous) && (await isTrustedLockEntryPath(cache, previous))) {
+          activeLogger.warn("Reusing previous trusted lock entry after sync failure", {
+            pluginID: spec.id,
+            resolvedPath: previous.resolvedPath,
+          })
+          return {
+            entry: previous,
+            reused: `${pluginDisplayName(spec)} (fallback cache)`,
+            warning,
+          }
+        }
+
+        return { warning }
+      }
+    }),
+  )
+
+  for (const [index, outcome] of settled.entries()) {
+    const spec = specs[index]
+    if (outcome.status === "fulfilled") {
+      if (outcome.value.entry) {
+        nextPlugins[spec.id] = outcome.value.entry
+      }
+      if (outcome.value.updated) {
+        updated.push(outcome.value.updated)
+      }
+      if (outcome.value.reused) {
+        reused.push(outcome.value.reused)
+      }
+      if (outcome.value.warning) {
+        warnings.push(outcome.value.warning)
+      }
       continue
     }
 
-    try {
-      const synced = await syncSinglePlugin(spec, cache, compatibleLock, mode, activeLogger)
-      nextPlugins[spec.id] = synced
-      updated.push(`${pluginDisplayName(spec)} (${mode})`)
-      activeLogger.debug("Plugin synced", {
+    const warning = `[plugin-manager] Failed to sync ${pluginDisplayName(spec)}: ${String(outcome.reason)}`
+    warnings.push(warning)
+    activeLogger.warn("Plugin sync failed", {
+      pluginID: spec.id,
+      source: spec.source,
+      mode,
+      error: String(outcome.reason),
+    })
+
+    const previous = currentLock.plugins[spec.id]
+    if (previous && isCompatibleLock(spec, previous) && (await isTrustedLockEntryPath(cache, previous))) {
+      nextPlugins[spec.id] = previous
+      reused.push(`${pluginDisplayName(spec)} (fallback cache)`)
+      activeLogger.warn("Reusing previous trusted lock entry after sync failure", {
         pluginID: spec.id,
-        source: spec.source,
-        mode,
+        resolvedPath: previous.resolvedPath,
       })
-    } catch (error) {
-      const warning = `[plugin-manager] Failed to sync ${pluginDisplayName(spec)}: ${String(error)}`
-      warnings.push(warning)
-      activeLogger.warn("Plugin sync failed", {
-        pluginID: spec.id,
-        source: spec.source,
-        mode,
-        error: String(error),
-      })
-      if (previous && isCompatibleLock(spec, previous) && (await isTrustedLockEntryPath(cache, previous))) {
-        nextPlugins[spec.id] = previous
-        reused.push(`${pluginDisplayName(spec)} (fallback cache)`)
-        activeLogger.warn("Reusing previous trusted lock entry after sync failure", {
-          pluginID: spec.id,
-          resolvedPath: previous.resolvedPath,
-        })
-      }
     }
   }
 

@@ -41,14 +41,14 @@ export async function loadManagedPlugins(
 ): Promise<LoadedPlugin[]> {
   const loaded: LoadedPlugin[] = []
 
-  for (const entry of entries) {
-    try {
+  const settled = await Promise.allSettled(
+    entries.map(async (entry) => {
       if (!(await isTrustedLockEntryPath(cache, entry))) {
         logger.warn(`[plugin-manager] Skipping untrusted plugin path for ${entry.id}: ${entry.resolvedPath}`, {
           pluginID: entry.id,
           resolvedPath: entry.resolvedPath,
         })
-        continue
+        return undefined
       }
       const moduleUrl = moduleUrlForEntry(entry, options)
       logger.debug("Loading managed plugin module", {
@@ -72,19 +72,29 @@ export async function loadManagedPlugins(
       }
 
       const hooks = await pluginFactory(input)
-      loaded.push({
-        id: entry.id,
-        hooks,
-      })
       logger.info("Managed plugin loaded", {
         pluginID: entry.id,
       })
-    } catch (error) {
-      logger.warn(`[plugin-manager] Failed to load ${entry.id}: ${String(error)}`, {
-        pluginID: entry.id,
-        error: String(error),
-      })
+      return {
+        id: entry.id,
+        hooks,
+      }
+    }),
+  )
+
+  for (const [index, outcome] of settled.entries()) {
+    const entry = entries[index]
+    if (outcome.status === "fulfilled") {
+      if (outcome.value) {
+        loaded.push(outcome.value)
+      }
+      continue
     }
+
+    logger.warn(`[plugin-manager] Failed to load ${entry.id}: ${String(outcome.reason)}`, {
+      pluginID: entry.id,
+      error: String(outcome.reason),
+    })
   }
 
   return loaded
