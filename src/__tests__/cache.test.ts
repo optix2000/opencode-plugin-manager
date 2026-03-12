@@ -347,50 +347,44 @@ describe("withCacheLock", () => {
     }
   })
 
-  test("does not reclaim lock when owner pid is still alive", async () => {
-    const cacheContext = makeCacheContext("/cache")
-    const lockBusyError = Object.assign(new Error("busy"), { code: "EEXIST" })
-    mockFsOpen.mockRejectedValue(lockBusyError)
-    mockFsReadFile.mockResolvedValue(JSON.stringify({ pid: process.pid, createdAt: 1 }))
+  const timeoutScenarios = [
+    {
+      name: "owner pid stays alive",
+      setup: () => {
+        mockFsReadFile.mockResolvedValue(JSON.stringify({ pid: process.pid, createdAt: 1 }))
+      },
+    },
+    {
+      name: "lock metadata cannot be used",
+      setup: () => undefined,
+    },
+  ]
 
-    const originalNow = Date.now
-    const nowSpy = mock(() => {
-      const value = nowSpy.mock.calls.length
-      return value === 1 ? 0 : 31
+  for (const scenario of timeoutScenarios) {
+    test(`times out when lock remains busy and ${scenario.name}`, async () => {
+      const cacheContext = makeCacheContext("/cache")
+      const lockBusyError = Object.assign(new Error("busy"), { code: "EEXIST" })
+      mockFsOpen.mockRejectedValue(lockBusyError)
+      scenario.setup()
+
+      const originalNow = Date.now
+      const nowSpy = mock(() => {
+        const value = nowSpy.mock.calls.length
+        return value === 1 ? 0 : 31
+      })
+      Date.now = nowSpy as typeof Date.now
+
+      try {
+        await expect(cache.withCacheLock(cacheContext, async () => "never", 30)).rejects.toThrow(
+          `Timed out waiting for cache lock: ${cacheContext.mutexPath}`,
+        )
+        expect(mockFsUnlink).not.toHaveBeenCalled()
+        expect(mockSleep).not.toHaveBeenCalled()
+      } finally {
+        Date.now = originalNow
+      }
     })
-    Date.now = nowSpy as typeof Date.now
-
-    try {
-      await expect(cache.withCacheLock(cacheContext, async () => "never", 30)).rejects.toThrow(
-        `Timed out waiting for cache lock: ${cacheContext.mutexPath}`,
-      )
-      expect(mockFsUnlink).not.toHaveBeenCalled()
-      expect(mockSleep).not.toHaveBeenCalled()
-    } finally {
-      Date.now = originalNow
-    }
-  })
-
-  test("throws timeout error when lock remains busy", async () => {
-    const cacheContext = makeCacheContext("/cache")
-    const lockBusyError = Object.assign(new Error("busy"), { code: "EEXIST" })
-    mockFsOpen.mockRejectedValue(lockBusyError)
-    const originalNow = Date.now
-    const nowSpy = mock(() => {
-      const value = nowSpy.mock.calls.length
-      return value === 1 ? 0 : 31
-    })
-    Date.now = nowSpy as typeof Date.now
-
-    try {
-      await expect(cache.withCacheLock(cacheContext, async () => "never", 30)).rejects.toThrow(
-        `Timed out waiting for cache lock: ${cacheContext.mutexPath}`,
-      )
-      expect(mockSleep).not.toHaveBeenCalled()
-    } finally {
-      Date.now = originalNow
-    }
-  })
+  }
 
   test("cleans up lock file when fn throws", async () => {
     const cacheContext = makeCacheContext("/cache")

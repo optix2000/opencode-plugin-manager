@@ -86,68 +86,66 @@ describe("resolvePluginEntry", () => {
     expect(mockFsReadFile).not.toHaveBeenCalled()
   })
 
-  test("uses package exports string candidate", async () => {
-    const pkgPath = path.join(ROOT_DIR, "package.json")
-    const entry = path.resolve(ROOT_DIR, "./dist/main.js")
-    setExistingPaths([pkgPath, entry])
-    mockFsReadFile.mockResolvedValue(JSON.stringify({ exports: "./dist/main.js" }))
+  const exportCases: Array<{
+    name: string
+    pkg: Record<string, unknown>
+    existing: string[]
+    expected: string
+  }> = [
+    {
+      name: "resolves package exports string candidate",
+      pkg: { exports: "./dist/main.js" },
+      existing: ["./dist/main.js"],
+      expected: "./dist/main.js",
+    },
+    {
+      name: "resolves package exports dot-string candidate",
+      pkg: { exports: { ".": "./lib.js" } },
+      existing: ["./lib.js"],
+      expected: "./lib.js",
+    },
+    {
+      name: "resolves package exports dot-import candidate",
+      pkg: { exports: { ".": { import: "./lib.js" } } },
+      existing: ["./lib.js"],
+      expected: "./lib.js",
+    },
+    {
+      name: "resolves package exports top-level import candidate",
+      pkg: { exports: { import: "./lib.js" } },
+      existing: ["./lib.js"],
+      expected: "./lib.js",
+    },
+    {
+      name: "resolves package exports nested bun-import candidate",
+      pkg: {
+        exports: {
+          ".": {
+            bun: { import: "./bun.mjs" },
+            import: "./index.js",
+          },
+        },
+      },
+      existing: ["./bun.mjs", "./index.js"],
+      expected: "./bun.mjs",
+    },
+    {
+      name: "resolves package exports array fallback candidates",
+      pkg: { exports: ["./missing.js", "./fallback.js"] },
+      existing: ["./fallback.js"],
+      expected: "./fallback.js",
+    },
+  ]
 
-    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(entry)
-  })
+  for (const { name, pkg, existing, expected } of exportCases) {
+    test(name, async () => {
+      const pkgPath = path.join(ROOT_DIR, "package.json")
+      setExistingPaths([pkgPath, ...existing.map((item) => path.resolve(ROOT_DIR, item))])
+      mockFsReadFile.mockResolvedValue(JSON.stringify(pkg))
 
-  test("uses package exports dot-string candidate", async () => {
-    const pkgPath = path.join(ROOT_DIR, "package.json")
-    const entry = path.resolve(ROOT_DIR, "./lib.js")
-    setExistingPaths([pkgPath, entry])
-    mockFsReadFile.mockResolvedValue(JSON.stringify({ exports: { ".": "./lib.js" } }))
-
-    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(entry)
-  })
-
-  test("uses package exports dot-import candidate", async () => {
-    const pkgPath = path.join(ROOT_DIR, "package.json")
-    const entry = path.resolve(ROOT_DIR, "./lib.js")
-    setExistingPaths([pkgPath, entry])
-    mockFsReadFile.mockResolvedValue(JSON.stringify({ exports: { ".": { import: "./lib.js" } } }))
-
-    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(entry)
-  })
-
-  test("uses package exports top-level import candidate", async () => {
-    const pkgPath = path.join(ROOT_DIR, "package.json")
-    const entry = path.resolve(ROOT_DIR, "./lib.js")
-    setExistingPaths([pkgPath, entry])
-    mockFsReadFile.mockResolvedValue(JSON.stringify({ exports: { import: "./lib.js" } }))
-
-    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(entry)
-  })
-
-  test("uses package exports dot-default candidate", async () => {
-    const pkgPath = path.join(ROOT_DIR, "package.json")
-    const entry = path.resolve(ROOT_DIR, "./default.js")
-    setExistingPaths([pkgPath, entry])
-    mockFsReadFile.mockResolvedValue(JSON.stringify({ exports: { ".": { default: "./default.js" } } }))
-
-    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(entry)
-  })
-
-  test("uses package exports dot-node candidate", async () => {
-    const pkgPath = path.join(ROOT_DIR, "package.json")
-    const entry = path.resolve(ROOT_DIR, "./node.js")
-    setExistingPaths([pkgPath, entry])
-    mockFsReadFile.mockResolvedValue(JSON.stringify({ exports: { ".": { node: "./node.js" } } }))
-
-    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(entry)
-  })
-
-  test("uses package exports dot-require candidate", async () => {
-    const pkgPath = path.join(ROOT_DIR, "package.json")
-    const entry = path.resolve(ROOT_DIR, "./require.cjs")
-    setExistingPaths([pkgPath, entry])
-    mockFsReadFile.mockResolvedValue(JSON.stringify({ exports: { ".": { require: "./require.cjs" } } }))
-
-    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(entry)
-  })
+      await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(path.resolve(ROOT_DIR, expected))
+    })
+  }
 
   test("prefers bun condition over import/default", async () => {
     const pkgPath = path.join(ROOT_DIR, "package.json")
@@ -168,34 +166,6 @@ describe("resolvePluginEntry", () => {
     )
 
     await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(bunEntry)
-  })
-
-  test("uses nested bun-import condition candidate", async () => {
-    const pkgPath = path.join(ROOT_DIR, "package.json")
-    const bunEntry = path.resolve(ROOT_DIR, "./bun.mjs")
-    const importEntry = path.resolve(ROOT_DIR, "./index.js")
-    setExistingPaths([pkgPath, bunEntry, importEntry])
-    mockFsReadFile.mockResolvedValue(
-      JSON.stringify({
-        exports: {
-          ".": {
-            bun: { import: "./bun.mjs" },
-            import: "./index.js",
-          },
-        },
-      }),
-    )
-
-    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(bunEntry)
-  })
-
-  test("uses package exports array fallback candidates", async () => {
-    const pkgPath = path.join(ROOT_DIR, "package.json")
-    const fallbackEntry = path.resolve(ROOT_DIR, "./fallback.js")
-    setExistingPaths([pkgPath, fallbackEntry])
-    mockFsReadFile.mockResolvedValue(JSON.stringify({ exports: ["./missing.js", "./fallback.js"] }))
-
-    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(fallbackEntry)
   })
 
   test("falls through from unsupported subpath exports to module/main", async () => {

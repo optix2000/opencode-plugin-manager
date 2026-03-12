@@ -9,120 +9,130 @@ import { CappedBuffer, expandHome, sanitizeSegment, normalizeGitRepo, parseNpmSh
 import { isGitRepoUrl } from "../types"
 
 describe("parseNpmShorthand", () => {
-  test("splits name and version on last @", () => {
-    const result = parseNpmShorthand("foo@1.0")
-    expect(result).toEqual({ name: "foo", version: "1.0" })
-  })
+  const cases: Array<{ name: string; input: string; expected: { name: string; version?: string } }> = [
+    {
+      name: "splits name and version on last @",
+      input: "foo@1.0",
+      expected: { name: "foo", version: "1.0" },
+    },
+    {
+      name: "handles scoped package with version",
+      input: "@scope/pkg@^2",
+      expected: { name: "@scope/pkg", version: "^2" },
+    },
+    {
+      name: "scoped package without version",
+      input: "@scope/pkg",
+      expected: { name: "@scope/pkg" },
+    },
+    {
+      name: "plain name with no @ returns no version",
+      input: "pkg",
+      expected: { name: "pkg" },
+    },
+    {
+      name: "trailing @ is treated as no version",
+      input: "pkg@",
+      expected: { name: "pkg" },
+    },
+  ]
 
-  test("handles scoped package with version", () => {
-    const result = parseNpmShorthand("@scope/pkg@^2")
-    expect(result).toEqual({ name: "@scope/pkg", version: "^2" })
-  })
-
-  test("scoped package without version (lastAtIndex === 0)", () => {
-    const result = parseNpmShorthand("@scope/pkg")
-    expect(result).toEqual({ name: "@scope/pkg" })
-    expect(result.version).toBeUndefined()
-  })
-
-  test("plain name with no @ returns no version", () => {
-    const result = parseNpmShorthand("pkg")
-    expect(result).toEqual({ name: "pkg" })
-    expect(result.version).toBeUndefined()
-  })
-
-  test("trailing @ is treated as no version", () => {
-    const result = parseNpmShorthand("pkg@")
-    expect(result).toEqual({ name: "pkg" })
-  })
+  for (const { name, input, expected } of cases) {
+    test(name, () => {
+      expect(parseNpmShorthand(input)).toEqual(expected)
+    })
+  }
 })
 
 describe("expandHome", () => {
-  test("exact ~ returns homedir", () => {
-    expect(expandHome("~")).toBe(os.homedir())
-  })
+  const cases: Array<{ name: string; input: string; expected: string }> = [
+    { name: "exact ~ returns homedir", input: "~", expected: os.homedir() },
+    { name: "~/path joins with homedir", input: "~/foo/bar", expected: path.join(os.homedir(), "foo/bar") },
+    { name: "absolute path passes through unchanged", input: "/absolute/path", expected: "/absolute/path" },
+    { name: "relative path passes through unchanged", input: "relative/path", expected: "relative/path" },
+  ]
 
-  test("~/path joins with homedir", () => {
-    expect(expandHome("~/foo/bar")).toBe(path.join(os.homedir(), "foo/bar"))
-  })
-
-  test("absolute path passes through unchanged", () => {
-    expect(expandHome("/absolute/path")).toBe("/absolute/path")
-  })
-
-  test("relative path passes through unchanged", () => {
-    expect(expandHome("relative/path")).toBe("relative/path")
-  })
+  for (const { name, input, expected } of cases) {
+    test(name, () => {
+      expect(expandHome(input)).toBe(expected)
+    })
+  }
 })
 
 describe("sanitizeSegment", () => {
-  test("replaces non-safe characters with underscore", () => {
-    expect(sanitizeSegment("@scope/pkg")).toBe("_scope_pkg")
-  })
+  const cases = [
+    { name: "replaces non-safe characters with underscore", input: "@scope/pkg", expected: "_scope_pkg" },
+    { name: "replaces spaces", input: "a b c", expected: "a_b_c" },
+    { name: "preserves safe characters", input: "valid.name-1_2", expected: "valid.name-1_2" },
+  ]
 
-  test("replaces spaces", () => {
-    expect(sanitizeSegment("a b c")).toBe("a_b_c")
-  })
-
-  test("preserves safe characters", () => {
-    expect(sanitizeSegment("valid.name-1_2")).toBe("valid.name-1_2")
-  })
+  for (const { name, input, expected } of cases) {
+    test(name, () => {
+      expect(sanitizeSegment(input)).toBe(expected)
+    })
+  }
 })
 
 describe("normalizeGitRepo", () => {
-  test("strips .git suffix and trims whitespace", () => {
-    expect(normalizeGitRepo("  https://github.com/foo/bar.git  ")).toBe("https://github.com/foo/bar")
-  })
+  const cases = [
+    {
+      name: "strips .git suffix and trims whitespace",
+      input: "  https://github.com/foo/bar.git  ",
+      expected: "https://github.com/foo/bar",
+    },
+    {
+      name: "passes through already clean URL",
+      input: "https://github.com/foo/bar",
+      expected: "https://github.com/foo/bar",
+    },
+    {
+      name: "only strips trailing .git",
+      input: "https://github.com/.git/bar",
+      expected: "https://github.com/.git/bar",
+    },
+    {
+      name: "strips .git suffix from SCP-style addresses",
+      input: "git@github.com:user/repo.git",
+      expected: "git@github.com:user/repo",
+    },
+    {
+      name: "passes through clean SCP-style addresses",
+      input: "git@github.com:user/repo",
+      expected: "git@github.com:user/repo",
+    },
+  ]
 
-  test("passes through already clean URL", () => {
-    expect(normalizeGitRepo("https://github.com/foo/bar")).toBe("https://github.com/foo/bar")
-  })
-
-  test("only strips trailing .git", () => {
-    expect(normalizeGitRepo("https://github.com/.git/bar")).toBe("https://github.com/.git/bar")
-  })
-
-  test("strips .git suffix from SCP-style addresses", () => {
-    expect(normalizeGitRepo("git@github.com:user/repo.git")).toBe("git@github.com:user/repo")
-  })
-
-  test("passes through clean SCP-style addresses", () => {
-    expect(normalizeGitRepo("git@github.com:user/repo")).toBe("git@github.com:user/repo")
-  })
+  for (const { name, input, expected } of cases) {
+    test(name, () => {
+      expect(normalizeGitRepo(input)).toBe(expected)
+    })
+  }
 })
 
 describe("isGitRepoUrl", () => {
-  test("accepts HTTPS URLs", () => {
-    expect(isGitRepoUrl("https://github.com/user/repo.git")).toBe(true)
-    expect(isGitRepoUrl("https://github.com/user/repo")).toBe(true)
+  test("accepts valid URL and SCP forms", () => {
+    const accepted = [
+      "https://github.com/user/repo.git",
+      "https://github.com/user/repo",
+      "ssh://git@github.com/user/repo.git",
+      "git://github.com/user/repo.git",
+      "file:///path/to/repo",
+      "git@github.com:user/repo.git",
+      "git@gitlab.example.com:org/project.git",
+      "deploy@myhost:repos/project",
+      "git@192.168.1.1:user/repo",
+    ]
+
+    for (const candidate of accepted) {
+      expect(isGitRepoUrl(candidate)).toBe(true)
+    }
   })
 
-  test("accepts SSH URLs", () => {
-    expect(isGitRepoUrl("ssh://git@github.com/user/repo.git")).toBe(true)
-  })
-
-  test("accepts git protocol URLs", () => {
-    expect(isGitRepoUrl("git://github.com/user/repo.git")).toBe(true)
-  })
-
-  test("accepts file URLs", () => {
-    expect(isGitRepoUrl("file:///path/to/repo")).toBe(true)
-  })
-
-  test("accepts SCP-style addresses with user@host:path", () => {
-    expect(isGitRepoUrl("git@github.com:user/repo.git")).toBe(true)
-    expect(isGitRepoUrl("git@gitlab.example.com:org/project.git")).toBe(true)
-    expect(isGitRepoUrl("deploy@myhost:repos/project")).toBe(true)
-  })
-
-  test("accepts SCP-style addresses with IP hosts", () => {
-    expect(isGitRepoUrl("git@192.168.1.1:user/repo")).toBe(true)
-  })
-
-  test("rejects bare strings without URL or SCP format", () => {
-    expect(isGitRepoUrl("not-a-url")).toBe(false)
-    expect(isGitRepoUrl("just-a-name")).toBe(false)
-    expect(isGitRepoUrl("")).toBe(false)
+  test("rejects strings without URL or SCP format", () => {
+    const rejected = ["not-a-url", "just-a-name", "", "totally invalid", ":no-scheme"]
+    for (const candidate of rejected) {
+      expect(isGitRepoUrl(candidate)).toBe(false)
+    }
   })
 
   test("scheme-like strings that parse as valid URLs are accepted", () => {
@@ -131,10 +141,6 @@ describe("isGitRepoUrl", () => {
     expect(isGitRepoUrl("https:foo")).toBe(true)
   })
 
-  test("rejects strings that are neither valid URLs nor SCP-style", () => {
-    expect(isGitRepoUrl("totally invalid")).toBe(false)
-    expect(isGitRepoUrl(":no-scheme")).toBe(false)
-  })
 })
 
 describe("sha256File", () => {

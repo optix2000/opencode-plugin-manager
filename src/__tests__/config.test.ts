@@ -236,40 +236,14 @@ describe("loadMergedConfig", () => {
     })
   })
 
-  test("skips invalid plugin entries and continues with valid ones in the same file", async () => {
-    setExistingFiles([GLOBAL_CONFIG_JSON])
-    setConfigFiles({
-      [GLOBAL_CONFIG_JSON]: {
-        plugins: [
-          { source: "git", repo: "not-a-url" },
-          "ok@1.0",
-        ],
-      },
-    })
-
-    const originalWarn = console.warn
-    const warn = mock((..._args: unknown[]) => undefined)
-    console.warn = warn as typeof console.warn
-
-    try {
-      const result = await loadMergedConfig(input("/repo", "/repo/subdir"))
-      expect(result.plugins).toHaveLength(1)
-      expect(result.plugins[0]).toMatchObject({ id: "npm:ok", version: "1.0" })
-      expect(warn).toHaveBeenCalledTimes(1)
-      expect(String(warn.mock.calls[0]?.[0])).toContain(`Skipping invalid plugin at index 0 in ${path.resolve(GLOBAL_CONFIG_JSON)}`)
-    } finally {
-      console.warn = originalWarn
-    }
-  })
-
-  test("skips invalid plugin entries across multiple config files", async () => {
+  test("skips invalid plugin entries while preserving valid entries from same and later files", async () => {
     setExistingFiles([GLOBAL_CONFIG_JSON, GLOBAL_CONFIG_JSONC])
     setConfigFiles({
       [GLOBAL_CONFIG_JSON]: {
-        plugins: [{ source: "git", repo: "not-a-url" }],
+        plugins: [{ source: "git", repo: "not-a-url" }, "same-file@1.0"],
       },
       [GLOBAL_CONFIG_JSONC]: {
-        plugins: ["ok@1.0"],
+        plugins: ["later-file@1.0"],
       },
     })
 
@@ -279,8 +253,8 @@ describe("loadMergedConfig", () => {
 
     try {
       const result = await loadMergedConfig(input("/repo", "/repo/subdir"))
-      expect(result.plugins).toHaveLength(1)
-      expect(result.plugins[0]).toMatchObject({ id: "npm:ok", version: "1.0" })
+      const ids = result.plugins.map((plugin) => plugin.id)
+      expect(ids).toEqual(["npm:same-file", "npm:later-file"])
       expect(warn).toHaveBeenCalledTimes(1)
       expect(String(warn.mock.calls[0]?.[0])).toContain(`Skipping invalid plugin at index 0 in ${path.resolve(GLOBAL_CONFIG_JSON)}`)
     } finally {
@@ -391,7 +365,7 @@ describe("loadMergedConfig", () => {
     }
   })
 
-  test("includes entry in plugin ID when entry is specified", async () => {
+  test("builds plugin IDs with and without explicit entry", async () => {
     setExistingFiles([GLOBAL_CONFIG_JSON])
     setConfigFiles({
       [GLOBAL_CONFIG_JSON]: {
@@ -399,102 +373,50 @@ describe("loadMergedConfig", () => {
           { source: "npm", name: "pkg", entry: "dist/a.js" },
           { source: "git", repo: "https://github.com/org/repo", entry: "dist/b.js" },
           { source: "local", path: "/local/plugin", entry: "dist/c.js" },
+          { source: "npm", name: "plain" },
+          { source: "local", path: "/local/plain" },
         ],
       },
     })
 
     const result = await loadMergedConfig(input("/repo", "/repo"))
-    const ids = result.plugins.map((p) => p.id)
+    const ids = result.plugins.map((plugin) => plugin.id)
 
     expect(ids).toContain("npm:pkg#dist/a.js")
     expect(ids).toContain("git:https://github.com/org/repo#dist/b.js")
     expect(ids).toContain("local:/local/plugin#dist/c.js")
+    expect(ids).toContain("npm:plain")
+    expect(ids).toContain("local:/local/plain")
   })
 
-  test("does not include entry in plugin ID when entry is omitted", async () => {
+  test("expands array entries into separate plugins across sources", async () => {
     setExistingFiles([GLOBAL_CONFIG_JSON])
     setConfigFiles({
       [GLOBAL_CONFIG_JSON]: {
         plugins: [
-          { source: "npm", name: "pkg" },
-          { source: "local", path: "/local/plugin" },
-        ],
-      },
-    })
-
-    const result = await loadMergedConfig(input("/repo", "/repo"))
-    const ids = result.plugins.map((p) => p.id)
-
-    expect(ids).toContain("npm:pkg")
-    expect(ids).toContain("local:/local/plugin")
-  })
-
-  test("expands array entries into separate plugins with distinct IDs", async () => {
-    setExistingFiles([GLOBAL_CONFIG_JSON])
-    setConfigFiles({
-      [GLOBAL_CONFIG_JSON]: {
-        plugins: [
-          {
-            source: "local",
-            path: "/local/monorepo",
-            entry: ["dist/plugin-a.js", "dist/plugin-b.js"],
-          },
-        ],
-      },
-    })
-
-    const result = await loadMergedConfig(input("/repo", "/repo"))
-
-    expect(result.plugins).toHaveLength(2)
-
-    const byId = new Map(result.plugins.map((p) => [p.id, p]))
-    expect(byId.get("local:/local/monorepo#dist/plugin-a.js")).toMatchObject({
-      source: "local",
-      path: "/local/monorepo",
-      entry: "dist/plugin-a.js",
-    })
-    expect(byId.get("local:/local/monorepo#dist/plugin-b.js")).toMatchObject({
-      source: "local",
-      path: "/local/monorepo",
-      entry: "dist/plugin-b.js",
-    })
-  })
-
-  test("expands array entries for npm and git sources", async () => {
-    setExistingFiles([GLOBAL_CONFIG_JSON])
-    setConfigFiles({
-      [GLOBAL_CONFIG_JSON]: {
-        plugins: [
+          { source: "local", path: "/local/monorepo", entry: ["dist/plugin-a.js", "dist/plugin-b.js"] },
           { source: "npm", name: "multi-pkg", entry: ["dist/a.js", "dist/b.js"] },
           { source: "git", repo: "https://github.com/org/repo", entry: ["dist/x.js", "dist/y.js"] },
+          { source: "local", path: "/local/single", entry: ["dist/index.js"] },
         ],
       },
     })
 
     const result = await loadMergedConfig(input("/repo", "/repo"))
-    expect(result.plugins).toHaveLength(4)
+    const ids = result.plugins.map((plugin) => plugin.id)
 
-    const ids = result.plugins.map((p) => p.id)
+    expect(ids).toContain("local:/local/monorepo#dist/plugin-a.js")
+    expect(ids).toContain("local:/local/monorepo#dist/plugin-b.js")
     expect(ids).toContain("npm:multi-pkg#dist/a.js")
     expect(ids).toContain("npm:multi-pkg#dist/b.js")
     expect(ids).toContain("git:https://github.com/org/repo#dist/x.js")
     expect(ids).toContain("git:https://github.com/org/repo#dist/y.js")
-  })
+    expect(ids).toContain("local:/local/single#dist/index.js")
 
-  test("single-element entry array works the same as a string entry", async () => {
-    setExistingFiles([GLOBAL_CONFIG_JSON])
-    setConfigFiles({
-      [GLOBAL_CONFIG_JSON]: {
-        plugins: [{ source: "local", path: "/local/plugin", entry: ["dist/index.js"] }],
-      },
-    })
-
-    const result = await loadMergedConfig(input("/repo", "/repo"))
-    expect(result.plugins).toHaveLength(1)
-    expect(result.plugins[0]).toMatchObject({
-      id: "local:/local/plugin#dist/index.js",
+    const byId = new Map(result.plugins.map((plugin) => [plugin.id, plugin]))
+    expect(byId.get("local:/local/single#dist/index.js")).toMatchObject({
       source: "local",
-      path: "/local/plugin",
+      path: "/local/single",
       entry: "dist/index.js",
     })
   })

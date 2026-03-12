@@ -175,25 +175,41 @@ describe("syncPlugins flow control", () => {
   })
 
   describe("update mode", () => {
-    test("always syncs even when lock is trusted and compatible", async () => {
-      const spec = makeSpec("git", {
+    test("always syncs and does not forward locked values", async () => {
+      const npmSpec = makeSpec("npm", {
+        id: "npm:update-compatible",
+        name: "update-compatible",
+      })
+      const gitSpec = makeSpec("git", {
         id: "git:update-compatible",
         repo: "https://github.com/test/update-compatible",
         ref: "main",
       })
-      const previous = makeLockEntry("git", {
-        id: spec.id,
-        repo: spec.repo,
-        ref: "main",
-        commit: "old-commit",
-      })
 
-      const result = await runSyncPlugins([spec], lockfileWith(spec, previous), "update")
+      const currentLock: Lockfile = {
+        version: 1,
+        plugins: {
+          [npmSpec.id]: makeLockEntry("npm", {
+            id: npmSpec.id,
+            name: npmSpec.name,
+            resolvedVersion: "1.0.0",
+          }),
+          [gitSpec.id]: makeLockEntry("git", {
+            id: gitSpec.id,
+            repo: gitSpec.repo,
+            ref: "main",
+            commit: "old-commit",
+          }),
+        },
+      }
 
-      expect(result.updated).toEqual([`${spec.id} (update)`])
+      const result = await runSyncPlugins([npmSpec, gitSpec], currentLock, "update")
+
+      expect(result.updated).toEqual([`${npmSpec.id} (update)`, `${gitSpec.id} (update)`])
       expect(result.reused).toEqual([])
       expect(result.warnings).toEqual([])
-      expect(mockSyncGitPlugin).toHaveBeenCalledWith(spec, cache, { lockedCommit: undefined }, expect.anything())
+      expect(mockSyncNpmPlugin).toHaveBeenCalledWith(npmSpec, cache, { lockedVersion: undefined }, expect.anything())
+      expect(mockSyncGitPlugin).toHaveBeenCalledWith(gitSpec, cache, { lockedCommit: undefined }, expect.anything())
     })
   })
 
@@ -471,82 +487,6 @@ describe("isCompatibleLock behavior via syncPlugins", () => {
     expect(result.updated).toEqual([`${spec.id} (install)`])
     expect(mockSyncNpmPlugin).toHaveBeenCalledWith(spec, cache, { lockedVersion: undefined }, expect.anything())
     expect(mockIsTrustedLockEntryPath).not.toHaveBeenCalled()
-  })
-})
-
-describe("syncSinglePlugin dispatch via syncPlugins", () => {
-  test("npm sync receives lockedVersion in install mode", async () => {
-    const spec = makeSpec("npm", { id: "npm:dispatch-install", name: "dispatch-install" })
-    const previous = makeLockEntry("npm", {
-      id: spec.id,
-      name: spec.name,
-      resolvedVersion: "2.1.0",
-    })
-
-    mockIsTrustedLockEntryPath.mockResolvedValue(false)
-    await runSyncPlugins([spec], lockfileWith(spec, previous), "install")
-
-    expect(mockSyncNpmPlugin).toHaveBeenCalledWith(spec, cache, { lockedVersion: "2.1.0" }, expect.anything())
-  })
-
-  test("git sync receives lockedCommit in install mode", async () => {
-    const spec = makeSpec("git", {
-      id: "git:dispatch-install",
-      repo: "https://github.com/test/dispatch-install",
-      ref: "main",
-    })
-    const previous = makeLockEntry("git", {
-      id: spec.id,
-      repo: spec.repo,
-      ref: "main",
-      commit: "commit-123",
-    })
-
-    mockIsTrustedLockEntryPath.mockResolvedValue(false)
-    await runSyncPlugins([spec], lockfileWith(spec, previous), "install")
-
-    expect(mockSyncGitPlugin).toHaveBeenCalledWith(spec, cache, { lockedCommit: "commit-123" }, expect.anything())
-  })
-
-  test("local specs dispatch to syncLocalPlugin", async () => {
-    const spec = makeSpec("local", { id: "local:dispatch", path: "/plugins/dispatch" })
-
-    await runSyncPlugins([spec], emptyLockfile(), "install")
-
-    expect(mockSyncLocalPlugin).toHaveBeenCalledWith(spec, expect.anything())
-    expect(mockSyncNpmPlugin).not.toHaveBeenCalled()
-    expect(mockSyncGitPlugin).not.toHaveBeenCalled()
-  })
-
-  test("update mode never forwards locked values to npm/git backends", async () => {
-    const npmSpec = makeSpec("npm", { id: "npm:update-no-locked", name: "update-no-locked" })
-    const gitSpec = makeSpec("git", {
-      id: "git:update-no-locked",
-      repo: "https://github.com/test/update-no-locked",
-      ref: "main",
-    })
-
-    const currentLock: Lockfile = {
-      version: 1,
-      plugins: {
-        [npmSpec.id]: makeLockEntry("npm", {
-          id: npmSpec.id,
-          name: npmSpec.name,
-          resolvedVersion: "1.0.0",
-        }),
-        [gitSpec.id]: makeLockEntry("git", {
-          id: gitSpec.id,
-          repo: gitSpec.repo,
-          ref: "main",
-          commit: "old-commit",
-        }),
-      },
-    }
-
-    await runSyncPlugins([npmSpec, gitSpec], currentLock, "update")
-
-    expect(mockSyncNpmPlugin).toHaveBeenCalledWith(npmSpec, cache, { lockedVersion: undefined }, expect.anything())
-    expect(mockSyncGitPlugin).toHaveBeenCalledWith(gitSpec, cache, { lockedCommit: undefined }, expect.anything())
   })
 })
 
