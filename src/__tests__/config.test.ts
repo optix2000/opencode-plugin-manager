@@ -100,6 +100,15 @@ describe("pluginDisplayName", () => {
     expect(pluginDisplayName(makeSpec("local", { path: "/local/plugin" }))).toBe("/local/plugin")
   })
 
+  test("formats plugin with entry", () => {
+    expect(pluginDisplayName(makeSpec("local", { path: "/local/plugin", entry: "dist/a.js" }))).toBe(
+      "/local/plugin (dist/a.js)",
+    )
+    expect(pluginDisplayName(makeSpec("npm", { name: "pkg", entry: "dist/a.js" }))).toBe("pkg (dist/a.js)")
+    expect(
+      pluginDisplayName(makeSpec("git", { repo: "https://github.com/org/repo", entry: "dist/a.js" })),
+    ).toBe("https://github.com/org/repo (dist/a.js)")
+  })
 })
 
 describe("loadMergedConfig", () => {
@@ -380,6 +389,114 @@ describe("loadMergedConfig", () => {
         console.warn = originalWarn
       }
     }
+  })
+
+  test("includes entry in plugin ID when entry is specified", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON])
+    setConfigFiles({
+      [GLOBAL_CONFIG_JSON]: {
+        plugins: [
+          { source: "npm", name: "pkg", entry: "dist/a.js" },
+          { source: "git", repo: "https://github.com/org/repo", entry: "dist/b.js" },
+          { source: "local", path: "/local/plugin", entry: "dist/c.js" },
+        ],
+      },
+    })
+
+    const result = await loadMergedConfig(input("/repo", "/repo"))
+    const ids = result.plugins.map((p) => p.id)
+
+    expect(ids).toContain("npm:pkg#dist/a.js")
+    expect(ids).toContain("git:https://github.com/org/repo#dist/b.js")
+    expect(ids).toContain("local:/local/plugin#dist/c.js")
+  })
+
+  test("does not include entry in plugin ID when entry is omitted", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON])
+    setConfigFiles({
+      [GLOBAL_CONFIG_JSON]: {
+        plugins: [
+          { source: "npm", name: "pkg" },
+          { source: "local", path: "/local/plugin" },
+        ],
+      },
+    })
+
+    const result = await loadMergedConfig(input("/repo", "/repo"))
+    const ids = result.plugins.map((p) => p.id)
+
+    expect(ids).toContain("npm:pkg")
+    expect(ids).toContain("local:/local/plugin")
+  })
+
+  test("expands array entries into separate plugins with distinct IDs", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON])
+    setConfigFiles({
+      [GLOBAL_CONFIG_JSON]: {
+        plugins: [
+          {
+            source: "local",
+            path: "/local/monorepo",
+            entry: ["dist/plugin-a.js", "dist/plugin-b.js"],
+          },
+        ],
+      },
+    })
+
+    const result = await loadMergedConfig(input("/repo", "/repo"))
+
+    expect(result.plugins).toHaveLength(2)
+
+    const byId = new Map(result.plugins.map((p) => [p.id, p]))
+    expect(byId.get("local:/local/monorepo#dist/plugin-a.js")).toMatchObject({
+      source: "local",
+      path: "/local/monorepo",
+      entry: "dist/plugin-a.js",
+    })
+    expect(byId.get("local:/local/monorepo#dist/plugin-b.js")).toMatchObject({
+      source: "local",
+      path: "/local/monorepo",
+      entry: "dist/plugin-b.js",
+    })
+  })
+
+  test("expands array entries for npm and git sources", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON])
+    setConfigFiles({
+      [GLOBAL_CONFIG_JSON]: {
+        plugins: [
+          { source: "npm", name: "multi-pkg", entry: ["dist/a.js", "dist/b.js"] },
+          { source: "git", repo: "https://github.com/org/repo", entry: ["dist/x.js", "dist/y.js"] },
+        ],
+      },
+    })
+
+    const result = await loadMergedConfig(input("/repo", "/repo"))
+    expect(result.plugins).toHaveLength(4)
+
+    const ids = result.plugins.map((p) => p.id)
+    expect(ids).toContain("npm:multi-pkg#dist/a.js")
+    expect(ids).toContain("npm:multi-pkg#dist/b.js")
+    expect(ids).toContain("git:https://github.com/org/repo#dist/x.js")
+    expect(ids).toContain("git:https://github.com/org/repo#dist/y.js")
+  })
+
+  test("single-element entry array works the same as a string entry", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON])
+    setConfigFiles({
+      [GLOBAL_CONFIG_JSON]: {
+        plugins: [{ source: "local", path: "/local/plugin", entry: ["dist/index.js"] }],
+      },
+    })
+
+    const result = await loadMergedConfig(input("/repo", "/repo"))
+    expect(result.plugins).toHaveLength(1)
+    expect(result.plugins[0]).toMatchObject({
+      id: "local:/local/plugin#dist/index.js",
+      source: "local",
+      path: "/local/plugin",
+      entry: "dist/index.js",
+    })
   })
 
   test("uses cacheDir from the last parsed global file", async () => {

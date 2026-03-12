@@ -43,25 +43,27 @@ export const BuildSchema = z.object({
 
 const NPM_PACKAGE_NAME_REGEX = /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/
 
+const EntrySchema = z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).optional()
+
 const NpmPluginSchema = z.object({
   source: z.literal("npm"),
   name: z.string().min(1).regex(NPM_PACKAGE_NAME_REGEX),
   version: z.string().min(1).optional(),
-  entry: z.string().min(1).optional(),
+  entry: EntrySchema,
 }).strict()
 
 const GitPluginSchema = z.object({
   source: z.literal("git"),
   repo: gitRepoString,
   ref: z.string().min(1).optional(),
-  entry: z.string().min(1).optional(),
+  entry: EntrySchema,
   build: BuildSchema.optional(),
 }).strict()
 
 const LocalPluginSchema = z.object({
   source: z.literal("local"),
   path: z.string().min(1),
-  entry: z.string().min(1).optional(),
+  entry: EntrySchema,
   build: BuildSchema.optional(),
 }).strict()
 
@@ -90,30 +92,52 @@ export const PluginsFileStructureSchema = z.object({
 export type PluginInput = z.infer<typeof PluginInputSchema>
 export type PluginsFile = z.infer<typeof PluginsFileSchema>
 
-export type NormalizedPluginSpec =
+export type NormalizedPluginInput =
   | {
       source: "npm"
       name: string
       version?: string
-      entry?: string
+      entry?: string | string[]
     }
   | {
       source: "git"
       repo: string
       ref?: string
-      entry?: string
+      entry?: string | string[]
       build?: z.infer<typeof BuildSchema>
     }
   | {
       source: "local"
       path: string
-      entry?: string
+      entry?: string | string[]
       build?: z.infer<typeof BuildSchema>
     }
-export type ManagedPluginSpec = NormalizedPluginSpec & {
-  id: string
-  fromFile: string
-}
+export type ManagedPluginSpec =
+  | {
+      source: "npm"
+      id: string
+      name: string
+      version?: string
+      entry?: string
+      fromFile: string
+    }
+  | {
+      source: "git"
+      id: string
+      repo: string
+      ref?: string
+      entry?: string
+      build?: z.infer<typeof BuildSchema>
+      fromFile: string
+    }
+  | {
+      source: "local"
+      id: string
+      path: string
+      entry?: string
+      build?: z.infer<typeof BuildSchema>
+      fromFile: string
+    }
 
 const LockEntryBaseSchema = z.object({
   id: z.string().min(1),

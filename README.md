@@ -66,7 +66,7 @@ Plugins can be a shorthand string or an object with more options.
 **String shorthands:**
 
 - `"my-plugin@1.2.3"` — npm package with optional version constraint
-- `"./path/to/plugin"` — local path (relative, absolute, or `~/`)
+- `"./path/to/plugin"` — local path (relative to the config file's directory, absolute, or `~/`)
 
 **Object keys:**
 
@@ -77,10 +77,25 @@ Plugins can be a shorthand string or an object with more options.
 | `version` | npm | no | semver range (default: `"latest"`) |
 | `repo` | git | yes | git clone URL |
 | `ref` | git | no | branch, tag, or commit to checkout |
-| `path` | local | yes | path to plugin directory |
-| `entry` | all | no | entry file override (default: auto-detected `opencode.plugin.ts`) |
+| `path` | local | yes | path to plugin directory or file (relative paths resolve against the config file's directory) |
+| `entry` | all | no | entry file override, or an array of entrypoints to load multiple plugins from the same source (default: auto-detected `opencode.plugin.ts`) |
 | `build.command` | git, local | no | shell command to run after clone/checkout |
 | `build.timeout` | git, local | no | build timeout in ms (max 300000) |
+
+#### Multiple entrypoints
+
+If a single repository or package contains multiple plugins, use an array for `entry`:
+
+```jsonc
+{
+  "source": "local",
+  "path": "./my-monorepo",
+  "entry": ["./packages/plugin-a/dist/index.js", "./packages/plugin-b/dist/index.js"],
+  "build": { "command": "npm run build" }
+}
+```
+
+Each entrypoint is treated as a separate plugin with its own ID, lock entry, and lifecycle. The build command (if any) runs once per entrypoint.
 
 ### Top-level keys
 

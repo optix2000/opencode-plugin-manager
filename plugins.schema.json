@@ -43,7 +43,11 @@
                 "type": "string"
               },
               "entry": {
-                "type": "string"
+                "oneOf": [
+                  { "type": "string" },
+                  { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+                ],
+                "description": "Entrypoint file override, or an array of entrypoints to load multiple plugins from the same source"
               },
               "build": {
                 "type": "object",
@@ -82,7 +86,11 @@
                 "type": "string"
               },
               "entry": {
-                "type": "string"
+                "oneOf": [
+                  { "type": "string" },
+                  { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+                ],
+                "description": "Entrypoint file override, or an array of entrypoints to load multiple plugins from the same source"
               }
             }
           },
@@ -105,7 +113,11 @@
                 "type": "string"
               },
               "entry": {
-                "type": "string"
+                "oneOf": [
+                  { "type": "string" },
+                  { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+                ],
+                "description": "Entrypoint file override, or an array of entrypoints to load multiple plugins from the same source"
               },
               "build": {
                 "type": "object",
