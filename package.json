@@ -1,6 +1,6 @@
 {
   "name": "opencode-plugin-manager",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Managed plugin sources for opencode",
   "type": "module",
   "main": "src/index.ts",
