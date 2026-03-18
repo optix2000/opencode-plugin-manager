@@ -304,8 +304,8 @@ describe("reportPlugins config hook", () => {
 
     expect(config.plugin).toEqual([
       "pkg-a",
-      "https://github.com/org/repo#main",
-      "/my/plugin",
+      "repo (git:org/repo#main)",
+      "plugin (local:/my/plugin)",
     ])
   })
 

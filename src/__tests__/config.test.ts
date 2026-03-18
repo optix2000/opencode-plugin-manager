@@ -84,30 +84,60 @@ describe("pluginDisplayName", () => {
     expect(pluginDisplayName(makeSpec("npm", { name: "pkg", version: undefined }))).toBe("pkg")
   })
 
+  test("formats npm plugin with entry", () => {
+    expect(pluginDisplayName(makeSpec("npm", { name: "pkg", entry: "dist/a.js" }))).toBe("pkg (dist/a.js)")
+  })
+
+  test("formats npm plugin with version and entry", () => {
+    expect(pluginDisplayName(makeSpec("npm", { name: "pkg", version: "1.2.3", entry: "dist/a.js" }))).toBe(
+      "pkg@1.2.3 (dist/a.js)",
+    )
+  })
+
   test("formats git plugin with ref", () => {
     expect(pluginDisplayName(makeSpec("git", { repo: "https://github.com/org/repo", ref: "main" }))).toBe(
-      "https://github.com/org/repo#main",
+      "repo (git:org/repo#main)",
     )
   })
 
   test("formats git plugin without ref", () => {
     expect(pluginDisplayName(makeSpec("git", { repo: "https://github.com/org/repo", ref: undefined }))).toBe(
-      "https://github.com/org/repo",
+      "repo (git:org/repo)",
     )
+  })
+
+  test("formats git plugin with SCP-style address", () => {
+    expect(pluginDisplayName(makeSpec("git", { repo: "git@github.com:org/repo" }))).toBe(
+      "repo (git:org/repo)",
+    )
+  })
+
+  test("formats git plugin with non-well-known host", () => {
+    expect(pluginDisplayName(makeSpec("git", { repo: "https://git.example.com/org/repo" }))).toBe(
+      "repo (git:git.example.com/org/repo)",
+    )
+  })
+
+  test("formats git plugin with ref and entry", () => {
+    expect(
+      pluginDisplayName(makeSpec("git", { repo: "https://github.com/org/repo", ref: "main", entry: "dist/a.js" })),
+    ).toBe("repo (git:org/repo#main, dist/a.js)")
+  })
+
+  test("formats git plugin with entry but no ref", () => {
+    expect(
+      pluginDisplayName(makeSpec("git", { repo: "https://github.com/org/repo", entry: "dist/a.js" })),
+    ).toBe("repo (git:org/repo, dist/a.js)")
   })
 
   test("formats local plugin", () => {
-    expect(pluginDisplayName(makeSpec("local", { path: "/local/plugin" }))).toBe("/local/plugin")
+    expect(pluginDisplayName(makeSpec("local", { path: "/local/plugin" }))).toBe("plugin (local:/local/plugin)")
   })
 
-  test("formats plugin with entry", () => {
+  test("formats local plugin with entry", () => {
     expect(pluginDisplayName(makeSpec("local", { path: "/local/plugin", entry: "dist/a.js" }))).toBe(
-      "/local/plugin (dist/a.js)",
+      "plugin (local:/local/plugin, dist/a.js)",
     )
-    expect(pluginDisplayName(makeSpec("npm", { name: "pkg", entry: "dist/a.js" }))).toBe("pkg (dist/a.js)")
-    expect(
-      pluginDisplayName(makeSpec("git", { repo: "https://github.com/org/repo", entry: "dist/a.js" })),
-    ).toBe("https://github.com/org/repo (dist/a.js)")
   })
 })
 

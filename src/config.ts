@@ -68,18 +68,55 @@ export async function loadMergedConfig(input: RuntimePluginInput, logger: Logger
 }
 
 export function pluginDisplayName(spec: ManagedPluginSpec): string {
-  let name: string
   if (spec.source === "npm") {
-    name = spec.version ? `${spec.name}@${spec.version}` : spec.name
-  } else if (spec.source === "git") {
-    name = spec.ref ? `${spec.repo}#${spec.ref}` : spec.repo
-  } else if (spec.source === "local") {
-    name = spec.path
-  } else {
-    const _exhaustive: never = spec
-    throw new Error(`Unhandled plugin source in pluginDisplayName: ${JSON.stringify(_exhaustive)}`)
+    const base = spec.version ? `${spec.name}@${spec.version}` : spec.name
+    return spec.entry ? `${base} (${spec.entry})` : base
   }
-  return spec.entry ? `${name} (${spec.entry})` : name
+
+  if (spec.source === "git") {
+    const shortPath = shortenGitRepo(spec.repo)
+    const repoName = shortPath.split("/").pop() ?? shortPath
+    const qualifier = spec.ref ? `${shortPath}#${spec.ref}` : shortPath
+    const details = spec.entry ? `git:${qualifier}, ${spec.entry}` : `git:${qualifier}`
+    return `${repoName} (${details})`
+  }
+
+  if (spec.source === "local") {
+    const dirName = spec.path.split("/").pop() ?? spec.path
+    const details = spec.entry ? `local:${spec.path}, ${spec.entry}` : `local:${spec.path}`
+    return `${dirName} (${details})`
+  }
+
+  const _exhaustive: never = spec
+  throw new Error(`Unhandled plugin source in pluginDisplayName: ${JSON.stringify(_exhaustive)}`)
+}
+
+const WELL_KNOWN_GIT_HOSTS = new Set(["github.com", "gitlab.com", "bitbucket.org"])
+
+/**
+ * Shorten a git repo URL to its essential path.
+ * For well-known hosts (github, gitlab, bitbucket): returns "org/repo"
+ * For other hosts: returns "host/org/repo" to avoid ambiguity
+ * For SCP-style (git@host:path): same rules apply
+ */
+export function shortenGitRepo(repo: string): string {
+  // SCP-style: git@host:path
+  const scpMatch = repo.match(/^[^@]+@([^:]+):(.+)$/)
+  if (scpMatch) {
+    const [, host, repoPath] = scpMatch
+    const cleanPath = repoPath.replace(/\.git$/, "")
+    return WELL_KNOWN_GIT_HOSTS.has(host) ? cleanPath : `${host}/${cleanPath}`
+  }
+
+  // Standard URL
+  try {
+    const url = new URL(repo)
+    const cleanPath = url.pathname.replace(/^\//, "").replace(/\.git$/, "")
+    return WELL_KNOWN_GIT_HOSTS.has(url.hostname) ? cleanPath : `${url.hostname}/${cleanPath}`
+  } catch {
+    // Fallback: return as-is if unparseable
+    return repo
+  }
 }
 
 function normalizePlugin(plugin: PluginsFile["plugins"][number], fromFile: string): ManagedPluginSpec[] {
