@@ -140,11 +140,11 @@ describe("syncNpmPlugin", () => {
     })
   })
 
-  test("runs bun install with --ignore-scripts", async () => {
+  test("runs npm install with --ignore-scripts", async () => {
     await sync()
 
     expect(mockRunCommand).toHaveBeenCalledWith({
-      command: "bun",
+      command: "npm",
       args: ["install", "--ignore-scripts"],
       cwd: TEMP_DIR,
       timeout: expect.any(Number),

@@ -100,7 +100,7 @@ export async function syncGitPlugin(
         pluginID: spec.id,
       })
       await runCommand({
-        command: "bun",
+        command: "npm",
         args: ["install", "--ignore-scripts"],
         cwd: cloneDir,
         timeout: GIT_DEPS_INSTALL_TIMEOUT_MS,

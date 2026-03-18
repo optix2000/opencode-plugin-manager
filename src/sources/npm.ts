@@ -45,7 +45,7 @@ export async function syncNpmPlugin(
 
   try {
     await runCommand({
-      command: "bun",
+      command: "npm",
       args: ["install", "--ignore-scripts"],
       cwd: tempDir,
       timeout: NPM_INSTALL_TIMEOUT_MS,
