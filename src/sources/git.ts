@@ -51,10 +51,11 @@ export async function syncGitPlugin(
           timeout: GIT_NETWORK_TIMEOUT_MS,
           logger,
         })
-      } catch {
+      } catch (error) {
         logger.info("Shallow fetch by commit failed; falling back to full fetch", {
           pluginID: spec.id,
           commit: options.lockedCommit,
+          error: String(error),
         })
         await runCommand({
           command: "git",
@@ -124,11 +125,11 @@ export async function syncGitPlugin(
       targetDir,
       extractedDir: cloneDir,
       validateExistingDir: async (installDir) => {
-        await resolvePluginEntry(installDir, spec.entry)
+        await resolvePluginEntry(installDir, spec.entry, logger)
       },
     })
 
-    const resolvedPath = await resolvePluginEntry(targetDir, spec.entry)
+    const resolvedPath = await resolvePluginEntry(targetDir, spec.entry, logger)
     const integrity = await sha256File(resolvedPath)
     logger.info("Git plugin synced", {
       pluginID: spec.id,

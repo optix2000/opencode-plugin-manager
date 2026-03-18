@@ -54,6 +54,11 @@ export async function syncNpmPlugin(
 
     const moduleRoot = path.join(tempDir, "node_modules", spec.name)
     if (!(await exists(moduleRoot))) {
+      logger.error("Npm install succeeded but expected package directory was missing", {
+        pluginID: spec.id,
+        package: spec.name,
+        moduleRoot,
+      })
       throw new Error(`Install succeeded but package was not found: ${spec.name}`)
     }
 
@@ -70,12 +75,12 @@ export async function syncNpmPlugin(
       extractedDir: tempDir,
       validateExistingDir: async (installDir) => {
         const packageDir = path.join(installDir, "node_modules", spec.name)
-        await resolvePluginEntry(packageDir, spec.entry)
+        await resolvePluginEntry(packageDir, spec.entry, logger)
       },
     })
 
     const packageDir = path.join(targetDir, "node_modules", spec.name)
-    const resolvedPath = await resolvePluginEntry(packageDir, spec.entry)
+    const resolvedPath = await resolvePluginEntry(packageDir, spec.entry, logger)
     const integrity = await sha256File(resolvedPath)
 
     logger.info("Npm plugin synced", {

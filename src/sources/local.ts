@@ -37,7 +37,7 @@ export async function syncLocalPlugin(spec: LocalSpec, logger: Logger): Promise<
     throw new Error(`'entry' cannot be set when local plugin path points to a file: ${pluginPath}`)
   }
 
-  const resolvedPath = stat.isDirectory() ? await resolvePluginEntry(pluginPath, spec.entry) : pluginPath
+  const resolvedPath = stat.isDirectory() ? await resolvePluginEntry(pluginPath, spec.entry, logger) : pluginPath
   const integrity = await sha256File(resolvedPath)
 
   logger.info("Local plugin synced", {

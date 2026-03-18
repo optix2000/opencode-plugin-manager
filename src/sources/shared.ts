@@ -1,12 +1,20 @@
 import path from "node:path"
+import { createNoopLogger, type Logger } from "../log"
 import { exists, fs } from "./shared.deps"
 
 const DEFAULT_ENTRYPOINT = "opencode.plugin.ts"
 const EXPORT_CONDITION_PRIORITY = ["bun", "import", "default", "node", "require"] as const
 
-export async function resolvePluginEntry(rootDir: string, explicitEntry?: string): Promise<string> {
+export async function resolvePluginEntry(
+  rootDir: string,
+  explicitEntry?: string,
+  logger: Logger = createNoopLogger(),
+): Promise<string> {
+  const attemptedPaths: string[] = []
+
   if (explicitEntry) {
     const resolved = resolveInside(rootDir, explicitEntry)
+    attemptedPaths.push(resolved)
     if (!(await exists(resolved))) {
       throw new Error(`Configured entrypoint not found: ${resolved}`)
     }
@@ -14,6 +22,7 @@ export async function resolvePluginEntry(rootDir: string, explicitEntry?: string
   }
 
   const conventionalEntrypoint = path.join(rootDir, DEFAULT_ENTRYPOINT)
+  attemptedPaths.push(conventionalEntrypoint)
   if (await exists(conventionalEntrypoint)) {
     return conventionalEntrypoint
   }
@@ -33,19 +42,30 @@ export async function resolvePluginEntry(rootDir: string, explicitEntry?: string
 
       for (const candidate of candidates) {
         const resolved = resolveInside(rootDir, candidate)
+        attemptedPaths.push(resolved)
         if (await exists(resolved)) {
           return resolved
         }
       }
-    } catch {
-      // package.json entry resolution is best effort.
+    } catch (error) {
+      logger.warn("Failed to parse package.json while resolving plugin entrypoint", {
+        rootDir,
+        pkgPath,
+        error: String(error),
+      })
     }
   }
 
   for (const fallback of ["index.js", "plugin.js"]) {
     const resolved = path.join(rootDir, fallback)
+    attemptedPaths.push(resolved)
     if (await exists(resolved)) return resolved
   }
+
+  logger.warn("Could not determine plugin entrypoint", {
+    rootDir,
+    candidatePaths: [...new Set(attemptedPaths)],
+  })
 
   throw new Error(`Could not determine plugin entrypoint for ${rootDir}`)
 }
@@ -83,7 +103,7 @@ export async function moveExtractedDirIntoPlace(input: {
       return
     }
 
-    throw new Error(`Install directory exists but remains invalid: ${targetDir}`)
+    throw new Error(`Install directory exists but remains invalid: ${targetDir} (from ${extractedDir})`)
   }
 }
 

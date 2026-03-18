@@ -280,7 +280,7 @@ describe("moveExtractedDirIntoPlace", () => {
     })
 
     await expect(moveExtractedDirIntoPlace({ targetDir, extractedDir, validateExistingDir })).rejects.toThrow(
-      `Install directory exists but remains invalid: ${targetDir}`,
+      `Install directory exists but remains invalid: ${targetDir} (from ${extractedDir})`,
     )
 
     expect(mockFsRename).toHaveBeenCalledTimes(2)

@@ -1,6 +1,6 @@
 import type { Plugin, ToolContext } from "@opencode-ai/plugin"
 import semver from "semver"
-import { createNoopLogger, createOpencodeLogger } from "./log"
+import { createNoopLogger, createOpencodeLogger, type Logger } from "./log"
 import {
   exists,
   fs,
@@ -101,8 +101,8 @@ export const PluginManager: Plugin = async (input) => {
       logger.info("Running plugin manager tool", {
         tool: TOOL_IDS.selfUpdate,
       })
-      const currentVersion = await getCurrentPluginManagerVersion()
-      const latestVersion = await getLatestRegistryVersion()
+      const currentVersion = await getCurrentPluginManagerVersion(logger)
+      const latestVersion = await getLatestRegistryVersion(logger)
 
       if (!currentVersion || !latestVersion) {
         logger.warn("Unable to determine plugin manager versions", {
@@ -232,7 +232,12 @@ export const PluginManager: Plugin = async (input) => {
     lines.push(`${verb} ${result.updated.length} plugin(s).`)
     if (result.updated.length) lines.push(`${verb}: ${result.updated.join(", ")}`)
     if (result.reused.length) lines.push(`Reused cache: ${result.reused.join(", ")}`)
-    if (result.warnings.length) lines.push(`Warnings: ${result.warnings.length}`)
+    if (result.warnings.length) {
+      lines.push("Warnings:")
+      for (const warning of result.warnings) {
+        lines.push(`- ${warning}`)
+      }
+    }
     if (activeMergedConfig.plugins.length) {
       lines.push("State transitions:")
       for (const spec of activeMergedConfig.plugins) {
@@ -341,26 +346,38 @@ function describeLockState(entry: Lockfile["plugins"][string] | undefined): stri
   throw new Error(`Unhandled lock entry source in describeLockState: ${JSON.stringify(_exhaustive)}`)
 }
 
-async function getCurrentPluginManagerVersion(): Promise<string | undefined> {
+async function getCurrentPluginManagerVersion(logger: Logger = createNoopLogger()): Promise<string | undefined> {
   try {
     const packageJsonPath = new URL("../package.json", import.meta.url)
     const text = await fs.readFile(packageJsonPath, "utf8")
     const json = JSON.parse(text) as { version?: string }
     return json.version
-  } catch {
+  } catch (error) {
+    logger.warn("Failed to resolve current plugin manager version", {
+      error: String(error),
+    })
     return undefined
   }
 }
 
-async function getLatestRegistryVersion(): Promise<string | undefined> {
+async function getLatestRegistryVersion(logger: Logger = createNoopLogger()): Promise<string | undefined> {
   try {
     const response = await fetch("https://registry.npmjs.org/opencode-plugin-manager/latest", {
       signal: AbortSignal.timeout(NPM_REGISTRY_TIMEOUT_MS),
     })
-    if (!response.ok) return undefined
+    if (!response.ok) {
+      logger.warn("npm registry responded with non-OK status while checking latest plugin manager version", {
+        status: response.status,
+        statusText: response.statusText,
+      })
+      return undefined
+    }
     const payload = (await response.json()) as { version?: string }
     return payload.version
-  } catch {
+  } catch (error) {
+    logger.warn("Failed to resolve latest plugin manager version from npm registry", {
+      error: String(error),
+    })
     return undefined
   }
 }

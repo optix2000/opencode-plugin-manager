@@ -64,7 +64,7 @@ describe("syncLocalPlugin", () => {
 
     expect(mockFsStat).toHaveBeenCalledWith(resolvedPluginPath)
     expect(mockResolvePluginEntry).toHaveBeenCalledTimes(1)
-    expect(mockResolvePluginEntry).toHaveBeenCalledWith(resolvedPluginPath, "dist/plugin.js")
+    expect(mockResolvePluginEntry).toHaveBeenCalledWith(resolvedPluginPath, "dist/plugin.js", TEST_LOGGER)
     expect(result).toMatchObject({
       id: spec.id,
       source: "local",

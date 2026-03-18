@@ -144,7 +144,7 @@ describe("syncGitPlugin", () => {
         validateExistingDir: expect.any(Function),
       }),
     )
-    expect(mockResolvePluginEntry).toHaveBeenCalledWith(TARGET_DIR, spec.entry)
+    expect(mockResolvePluginEntry).toHaveBeenCalledWith(TARGET_DIR, spec.entry, TEST_LOGGER)
     expect(mockSha256File).toHaveBeenCalledWith(RESOLVED_PATH)
 
     expect(result).toEqual({

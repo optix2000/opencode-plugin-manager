@@ -132,7 +132,7 @@ export async function withCacheLock<T>(
 }
 
 async function reclaimStaleLock(cache: CacheContext, logger: Logger): Promise<boolean> {
-  const metadata = await readLockMetadata(cache.mutexPath)
+  const metadata = await readLockMetadata(cache.mutexPath, logger)
   if (metadata) {
     if (isProcessAlive(metadata.pid)) {
       return false
@@ -164,20 +164,36 @@ async function reclaimStaleLock(cache: CacheContext, logger: Logger): Promise<bo
   return await unlinkIfPresent(cache.mutexPath)
 }
 
-async function readLockMetadata(mutexPath: string): Promise<LockMetadata | undefined> {
+async function readLockMetadata(mutexPath: string, logger: Logger): Promise<LockMetadata | undefined> {
   try {
     const text = await fs.readFile(mutexPath, "utf8")
     const parsed = JSON.parse(text) as Partial<LockMetadata>
     const pid = parsed.pid
     const createdAt = parsed.createdAt
-    if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return undefined
-    if (typeof createdAt !== "number" || !Number.isFinite(createdAt)) return undefined
+    if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
+      logger.debug("Cache lock metadata is invalid; ignoring", {
+        mutexPath,
+        metadata: parsed,
+      })
+      return undefined
+    }
+    if (typeof createdAt !== "number" || !Number.isFinite(createdAt)) {
+      logger.debug("Cache lock metadata is invalid; ignoring", {
+        mutexPath,
+        metadata: parsed,
+      })
+      return undefined
+    }
     return {
       pid,
       createdAt,
       ...(typeof parsed.host === "string" ? { host: parsed.host } : {}),
     }
-  } catch {
+  } catch (error) {
+    logger.debug("Failed to parse cache lock metadata; ignoring", {
+      mutexPath,
+      error: String(error),
+    })
     return undefined
   }
 }
