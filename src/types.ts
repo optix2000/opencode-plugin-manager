@@ -78,6 +78,7 @@ export const PluginsFileSchema = z.object({
   cacheDir: z.string().min(1).optional(),
   autoinstall: z.boolean().optional(),
   autoprune: z.boolean().optional(),
+  reportPlugins: z.boolean().optional(),
   plugins: z.array(PluginInputSchema),
 })
 
@@ -86,6 +87,7 @@ export const PluginsFileStructureSchema = z.object({
   cacheDir: z.string().min(1).optional(),
   autoinstall: z.boolean().optional(),
   autoprune: z.boolean().optional(),
+  reportPlugins: z.boolean().optional(),
   plugins: z.array(z.unknown()),
 })
 

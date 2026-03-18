@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import semver from "semver"
 import type { MergedConfig } from "../config"
+import { pluginDisplayName } from "../config"
 import type { LockEntry, Lockfile } from "../types"
 import { makeCacheContext, makeLockEntry, makeSpec } from "./helpers"
 
@@ -36,6 +37,7 @@ mock.module("../index.deps", () => ({
   syncPlugins: mockSyncPlugins,
   loadManagedPlugins: mockLoadManagedPlugins,
   mergeManagedHooks: mockMergeManagedHooks,
+  pluginDisplayName,
   exists: mockExists,
   semver,
   fs: {
@@ -202,6 +204,136 @@ describe("PluginManager config hook", () => {
     await hooks.config({})
 
     expect(hasLogged("info", "[plugin-manager] No cached plugins loaded. Run tool: opm_install")).toBe(false)
+  })
+})
+
+describe("reportPlugins config hook", () => {
+  test("appends loaded plugin display names to config.plugin when reportPlugins is true", async () => {
+    const spec = makeSpec("npm", { id: "npm:my-plugin", name: "my-plugin", version: "2.0.0" })
+    mockLoadMergedConfig.mockResolvedValue(makeMergedConfig({ plugins: [spec], reportPlugins: true }))
+    mockLoadManagedPlugins.mockResolvedValue([{ id: "npm:my-plugin", hooks: {} }])
+
+    const hooks = (await PluginManager(makePluginInput())) as any
+    const config: any = { plugin: ["opencode-plugin-manager"] }
+    await hooks.config(config)
+
+    expect(config.plugin).toEqual(["opencode-plugin-manager", "my-plugin@2.0.0"])
+  })
+
+  test("does not modify config.plugin when reportPlugins is false", async () => {
+    const spec = makeSpec("npm", { id: "npm:my-plugin", name: "my-plugin" })
+    mockLoadMergedConfig.mockResolvedValue(makeMergedConfig({ plugins: [spec], reportPlugins: false }))
+    mockLoadManagedPlugins.mockResolvedValue([{ id: "npm:my-plugin", hooks: {} }])
+
+    const hooks = (await PluginManager(makePluginInput())) as any
+    const config: any = { plugin: ["opencode-plugin-manager"] }
+    await hooks.config(config)
+
+    expect(config.plugin).toEqual(["opencode-plugin-manager"])
+  })
+
+  test("does not modify config.plugin when reportPlugins is not set", async () => {
+    const spec = makeSpec("npm", { id: "npm:my-plugin", name: "my-plugin" })
+    mockLoadMergedConfig.mockResolvedValue(makeMergedConfig({ plugins: [spec] }))
+    mockLoadManagedPlugins.mockResolvedValue([{ id: "npm:my-plugin", hooks: {} }])
+
+    const hooks = (await PluginManager(makePluginInput())) as any
+    const config: any = { plugin: ["opencode-plugin-manager"] }
+    await hooks.config(config)
+
+    expect(config.plugin).toEqual(["opencode-plugin-manager"])
+  })
+
+  test("creates config.plugin array when it is undefined", async () => {
+    const spec = makeSpec("npm", { id: "npm:my-plugin", name: "my-plugin" })
+    mockLoadMergedConfig.mockResolvedValue(makeMergedConfig({ plugins: [spec], reportPlugins: true }))
+    mockLoadManagedPlugins.mockResolvedValue([{ id: "npm:my-plugin", hooks: {} }])
+
+    const hooks = (await PluginManager(makePluginInput())) as any
+    const config: any = {}
+    await hooks.config(config)
+
+    expect(config.plugin).toEqual(["my-plugin"])
+  })
+
+  test("does not add duplicates when plugin name already in config.plugin", async () => {
+    const spec = makeSpec("npm", { id: "npm:my-plugin", name: "my-plugin" })
+    mockLoadMergedConfig.mockResolvedValue(makeMergedConfig({ plugins: [spec], reportPlugins: true }))
+    mockLoadManagedPlugins.mockResolvedValue([{ id: "npm:my-plugin", hooks: {} }])
+
+    const hooks = (await PluginManager(makePluginInput())) as any
+    const config: any = { plugin: ["my-plugin"] }
+    await hooks.config(config)
+
+    expect(config.plugin).toEqual(["my-plugin"])
+  })
+
+  test("replaces the array instead of mutating the original", async () => {
+    const spec = makeSpec("npm", { id: "npm:my-plugin", name: "my-plugin" })
+    mockLoadMergedConfig.mockResolvedValue(makeMergedConfig({ plugins: [spec], reportPlugins: true }))
+    mockLoadManagedPlugins.mockResolvedValue([{ id: "npm:my-plugin", hooks: {} }])
+
+    const hooks = (await PluginManager(makePluginInput())) as any
+    const originalArray = ["opencode-plugin-manager"]
+    const config: any = { plugin: originalArray }
+    await hooks.config(config)
+
+    // The original array should not have been mutated
+    expect(originalArray).toEqual(["opencode-plugin-manager"])
+    // config.plugin should be a new array with the additions
+    expect(config.plugin).toEqual(["opencode-plugin-manager", "my-plugin"])
+    expect(config.plugin).not.toBe(originalArray)
+  })
+
+  test("reports multiple plugins from different sources", async () => {
+    const npmSpec = makeSpec("npm", { id: "npm:pkg-a", name: "pkg-a" })
+    const gitSpec = makeSpec("git", { id: "git:https://github.com/org/repo", repo: "https://github.com/org/repo", ref: "main" })
+    const localSpec = makeSpec("local", { id: "local:/my/plugin", path: "/my/plugin" })
+    mockLoadMergedConfig.mockResolvedValue(
+      makeMergedConfig({ plugins: [npmSpec, gitSpec, localSpec], reportPlugins: true }),
+    )
+    mockLoadManagedPlugins.mockResolvedValue([
+      { id: "npm:pkg-a", hooks: {} },
+      { id: "git:https://github.com/org/repo", hooks: {} },
+      { id: "local:/my/plugin", hooks: {} },
+    ])
+
+    const hooks = (await PluginManager(makePluginInput())) as any
+    const config: any = { plugin: [] }
+    await hooks.config(config)
+
+    expect(config.plugin).toEqual([
+      "pkg-a",
+      "https://github.com/org/repo#main",
+      "/my/plugin",
+    ])
+  })
+
+  test("does not report when no plugins are loaded", async () => {
+    const spec = makeSpec("npm", { id: "npm:my-plugin", name: "my-plugin" })
+    mockLoadMergedConfig.mockResolvedValue(makeMergedConfig({ plugins: [spec], reportPlugins: true }))
+    mockLoadManagedPlugins.mockResolvedValue([])
+
+    const hooks = (await PluginManager(makePluginInput())) as any
+    const config: any = { plugin: ["opencode-plugin-manager"] }
+    await hooks.config(config)
+
+    expect(config.plugin).toEqual(["opencode-plugin-manager"])
+  })
+
+  test("skips loaded plugins whose spec is not found", async () => {
+    const spec = makeSpec("npm", { id: "npm:known", name: "known" })
+    mockLoadMergedConfig.mockResolvedValue(makeMergedConfig({ plugins: [spec], reportPlugins: true }))
+    mockLoadManagedPlugins.mockResolvedValue([
+      { id: "npm:known", hooks: {} },
+      { id: "npm:unknown", hooks: {} },
+    ])
+
+    const hooks = (await PluginManager(makePluginInput())) as any
+    const config: any = { plugin: [] }
+    await hooks.config(config)
+
+    expect(config.plugin).toEqual(["known"])
   })
 })
 

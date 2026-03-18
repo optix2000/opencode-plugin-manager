@@ -7,6 +7,7 @@ import {
   loadManagedPlugins,
   loadMergedConfig,
   mergeManagedHooks,
+  pluginDisplayName,
   pruneCacheDirectories,
   readLockfile,
   resolveCacheContext,
@@ -160,6 +161,27 @@ export const PluginManager: Plugin = async (input) => {
       }
       if (!loaded.length && !mergedConfig.autoinstall) {
         logger.info(`[plugin-manager] No cached plugins loaded. Run tool: ${TOOL_IDS.install}`)
+      }
+
+      if (mergedConfig.reportPlugins && loaded.length) {
+        const specByID = new Map(mergedConfig.plugins.map((spec) => [spec.id, spec]))
+        const existing = new Set(config.plugin ?? [])
+        const additions: string[] = []
+
+        for (const plugin of loaded) {
+          const spec = specByID.get(plugin.id)
+          if (!spec) continue
+          const displayName = pluginDisplayName(spec)
+          if (existing.has(displayName)) continue
+          additions.push(displayName)
+        }
+
+        if (additions.length) {
+          config.plugin = [...(config.plugin ?? []), ...additions]
+          logger.info(`[plugin-manager] Reported ${additions.length} managed plugin(s) to opencode config`, {
+            additions,
+          })
+        }
       }
     },
   }

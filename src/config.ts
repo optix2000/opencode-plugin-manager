@@ -12,6 +12,7 @@ export type MergedConfig = {
   cacheDirBase?: string
   autoinstall?: boolean
   autoprune?: boolean
+  reportPlugins?: boolean
   plugins: ManagedPluginSpec[]
 }
 
@@ -23,6 +24,7 @@ export async function loadMergedConfig(input: RuntimePluginInput, logger: Logger
   let cacheDirBase: string | undefined
   let autoinstall: boolean | undefined
   let autoprune: boolean | undefined
+  let reportPlugins: boolean | undefined
 
   for (const file of files) {
     const parsed = await parseConfigFile(file, logger)
@@ -41,6 +43,10 @@ export async function loadMergedConfig(input: RuntimePluginInput, logger: Logger
       autoprune = parsed.autoprune
     }
 
+    if (parsed.reportPlugins !== undefined) {
+      reportPlugins = parsed.reportPlugins
+    }
+
     for (const plugin of parsed.plugins) {
       const specs = normalizePlugin(plugin, file)
       for (const spec of specs) {
@@ -56,6 +62,7 @@ export async function loadMergedConfig(input: RuntimePluginInput, logger: Logger
     cacheDirBase,
     autoinstall,
     autoprune,
+    reportPlugins,
     plugins: [...merged.values()],
   }
 }
@@ -193,6 +200,7 @@ async function parseConfigFile(filePath: string, logger: Logger): Promise<Plugin
     cacheDir: structure.data.cacheDir,
     autoinstall: structure.data.autoinstall,
     autoprune: structure.data.autoprune,
+    reportPlugins: structure.data.reportPlugins,
     plugins: validPlugins,
   }
 }

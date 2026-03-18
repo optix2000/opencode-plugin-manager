@@ -19,6 +19,11 @@
       "description": "Automatically prune stale cache directories on startup so removed plugins are cleaned up without a manual tool call or restart",
       "default": false
     },
+    "reportPlugins": {
+      "type": "boolean",
+      "description": "Append managed plugin names to opencode's config.plugin list so they appear in opencode's plugin display",
+      "default": false
+    },
     "plugins": {
       "type": "array",
       "default": [],
