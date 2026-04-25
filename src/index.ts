@@ -43,7 +43,7 @@ export const PluginManager: Plugin = async (input) => {
 
   const initialLockfile = await readLockfile(cache.lockfilePath, logger)
   const initialEntries = await resolveCachedPluginPaths(mergedConfig.plugins, initialLockfile, cache, logger)
-  let loaded = await loadManagedPlugins(initialEntries, input, cache, logger, nextReloadOptions("startup"))
+  let loaded = await loadManagedPlugins(initialEntries, input, cache, logger, nextReloadOptions("startup", mergedConfig.plugins))
 
   if (mergedConfig.autoinstall) {
     try {
@@ -225,7 +225,7 @@ export const PluginManager: Plugin = async (input) => {
     }
 
     const refreshedEntries = await resolveCachedPluginPaths(activeMergedConfig.plugins, result.lockfile, activeCache, logger)
-    loaded = await loadManagedPlugins(refreshedEntries, input, activeCache, logger, nextReloadOptions(`tool:${mode}`))
+    loaded = await loadManagedPlugins(refreshedEntries, input, activeCache, logger, nextReloadOptions(`tool:${mode}`, activeMergedConfig.plugins))
 
     const lines: string[] = []
     const verb = mode === "install" ? "Installed" : "Updated"
@@ -284,7 +284,7 @@ export const PluginManager: Plugin = async (input) => {
     }, undefined, logger)
 
     const refreshedEntries = await resolveCachedPluginPaths(activeMergedConfig.plugins, result.lockfile, activeCache, logger)
-    loaded = await loadManagedPlugins(refreshedEntries, input, activeCache, logger, nextReloadOptions("tool:prune"))
+    loaded = await loadManagedPlugins(refreshedEntries, input, activeCache, logger, nextReloadOptions("tool:prune", activeMergedConfig.plugins))
 
     const lines: string[] = []
     lines.push(`Removed ${result.removedPaths.length} cached plugin directory(s).`)
@@ -313,11 +313,12 @@ export const PluginManager: Plugin = async (input) => {
     return [installOutput, "", pruneOutput].join("\n")
   }
 
-  function nextReloadOptions(reason: string) {
+  function nextReloadOptions(reason: string, specs: typeof mergedConfig.plugins) {
     reloadNonce += 1
     return {
       cacheBustLocal: true,
       cacheBustToken: `${Date.now()}-${reloadNonce}-${reason}`,
+      specs,
     }
   }
 }

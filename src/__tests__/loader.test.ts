@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { makeCacheContext, makeLockEntry } from "./helpers"
+import { makeCacheContext, makeLockEntry, makeSpec } from "./helpers"
 
 const mockIsTrustedLockEntryPath = mock()
 const mockSha256File = mock()
@@ -311,6 +311,49 @@ describe("loadManagedPlugins", () => {
 
     expect(loaded).toEqual([])
     expect(warningMessages().some((message) => message.includes("Failed to load npm:missing"))).toBe(true)
+  })
+
+  test("passes configured plugin options to plugin factory", async () => {
+    const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opm-loader-options-"))
+    const pluginPath = path.join(tempDir, "plugin.js")
+    const mark = path.join(tempDir, "options.json")
+    const cache = makeCacheContext("/cache")
+
+    try {
+      await fs.promises.writeFile(
+        pluginPath,
+        [
+          'import * as fs from "node:fs/promises"',
+          "export default async function plugin(_input, options) {",
+          `  await fs.writeFile(${JSON.stringify(mark)}, JSON.stringify(options ?? null), "utf8")`,
+          "  return {}",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+
+      const entry = makeLockEntry("local", {
+        id: "local:options",
+        path: tempDir,
+        resolvedPath: pluginPath,
+      })
+      const spec = makeSpec("local", {
+        id: "local:options",
+        path: tempDir,
+        options: { enabled: true, mode: "test" },
+      })
+
+      const loaded = await loadManagedPlugins([entry], {} as any, cache, undefined, { specs: [spec] })
+
+      expect(loaded).toHaveLength(1)
+      expect(JSON.parse(await fs.promises.readFile(mark, "utf8"))).toEqual({
+        enabled: true,
+        mode: "test",
+      })
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true })
+    }
   })
 
   test("continues processing entries after failures", async () => {

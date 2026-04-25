@@ -1,11 +1,11 @@
 import * as fs from "node:fs/promises"
 import path from "node:path"
-import type { Hooks, Plugin as PluginFactory, PluginInput } from "@opencode-ai/plugin"
+import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { pathToFileURL } from "node:url"
 import type { CacheContext } from "./cache"
 import { createConsoleLogger, type Logger } from "./log"
 import { isTrustedLockEntryPath, sha256File } from "./loader.deps"
-import type { LockEntry } from "./types"
+import type { LockEntry, ManagedPluginSpec } from "./types"
 import { sanitizeToolName } from "./util"
 
 const LOCAL_RELOAD_COPY_MARKER = ".opm-reload-"
@@ -16,9 +16,12 @@ type LoadedPlugin = {
   hooks: Hooks
 }
 
+type PluginFactory = (input: PluginInput, options?: Record<string, unknown>) => Promise<Hooks>
+
 export type LoadManagedPluginsOptions = {
   cacheBustLocal?: boolean
   cacheBustToken?: string
+  specs?: ManagedPluginSpec[]
 }
 
 type FanOutHookKey = {
@@ -51,6 +54,7 @@ export async function loadManagedPlugins(
   options: LoadManagedPluginsOptions = {},
 ): Promise<LoadedPlugin[]> {
   const loaded: LoadedPlugin[] = []
+  const pluginOptionsByID = new Map(options.specs?.map((spec) => [spec.id, spec.options]))
 
   const settled = await Promise.allSettled(
     entries.map(async (entry) => {
@@ -96,7 +100,7 @@ export async function loadManagedPlugins(
         pluginFactory = namedExports[0][1] as PluginFactory
       }
 
-      const hooks = await pluginFactory(input)
+      const hooks = await pluginFactory(input, pluginOptionsByID.get(entry.id))
       logger.info("Managed plugin loaded", {
         pluginID: entry.id,
       })

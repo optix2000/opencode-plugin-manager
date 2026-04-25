@@ -148,6 +148,7 @@ function normalizePlugin(plugin: PluginsFile["plugins"][number], fromFile: strin
       name: normalized.name,
       version: normalized.version,
       entry,
+      options: normalized.options,
       id: pluginId("npm", normalized.name, entry),
       fromFile,
     }))
@@ -161,6 +162,7 @@ function normalizePlugin(plugin: PluginsFile["plugins"][number], fromFile: strin
       ref: normalized.ref,
       build: normalized.build,
       entry,
+      options: normalized.options,
       id: pluginId("git", normalizedRepo, entry),
       fromFile,
     }))
@@ -173,6 +175,7 @@ function normalizePlugin(plugin: PluginsFile["plugins"][number], fromFile: strin
       path: resolvedPath,
       build: normalized.build,
       entry,
+      options: normalized.options,
       id: pluginId("local", resolvedPath, entry),
       fromFile,
     }))

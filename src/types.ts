@@ -44,12 +44,14 @@ export const BuildSchema = z.object({
 const NPM_PACKAGE_NAME_REGEX = /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/
 
 const EntrySchema = z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).optional()
+const PluginOptionsSchema = z.record(z.unknown())
 
 const NpmPluginSchema = z.object({
   source: z.literal("npm"),
   name: z.string().min(1).regex(NPM_PACKAGE_NAME_REGEX),
   version: z.string().min(1).optional(),
   entry: EntrySchema,
+  options: PluginOptionsSchema.optional(),
 }).strict()
 
 const GitPluginSchema = z.object({
@@ -58,6 +60,7 @@ const GitPluginSchema = z.object({
   ref: z.string().min(1).optional(),
   entry: EntrySchema,
   build: BuildSchema.optional(),
+  options: PluginOptionsSchema.optional(),
 }).strict()
 
 const LocalPluginSchema = z.object({
@@ -65,6 +68,7 @@ const LocalPluginSchema = z.object({
   path: z.string().min(1),
   entry: EntrySchema,
   build: BuildSchema.optional(),
+  options: PluginOptionsSchema.optional(),
 }).strict()
 
 export const PluginInputSchema = z.union([
@@ -100,6 +104,7 @@ export type NormalizedPluginInput =
       name: string
       version?: string
       entry?: string | string[]
+      options?: Record<string, unknown>
     }
   | {
       source: "git"
@@ -107,12 +112,14 @@ export type NormalizedPluginInput =
       ref?: string
       entry?: string | string[]
       build?: z.infer<typeof BuildSchema>
+      options?: Record<string, unknown>
     }
   | {
       source: "local"
       path: string
       entry?: string | string[]
       build?: z.infer<typeof BuildSchema>
+      options?: Record<string, unknown>
     }
 export type ManagedPluginSpec =
   | {
@@ -121,6 +128,7 @@ export type ManagedPluginSpec =
       name: string
       version?: string
       entry?: string
+      options?: Record<string, unknown>
       fromFile: string
     }
   | {
@@ -130,6 +138,7 @@ export type ManagedPluginSpec =
       ref?: string
       entry?: string
       build?: z.infer<typeof BuildSchema>
+      options?: Record<string, unknown>
       fromFile: string
     }
   | {
@@ -138,6 +147,7 @@ export type ManagedPluginSpec =
       path: string
       entry?: string
       build?: z.infer<typeof BuildSchema>
+      options?: Record<string, unknown>
       fromFile: string
     }
 

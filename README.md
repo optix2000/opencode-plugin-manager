@@ -45,7 +45,10 @@ Create `plugins.json` (or `plugins.jsonc`) in `~/.config/opencode/`:
       "source": "git",
       "repo": "https://github.com/acme/opencode-git-plugin.git",
       "ref": "v1.0.0",
-      "entry": "./dist/index.js"
+      "entry": "./dist/index.js",
+      "options": {
+        "enabled": true
+      }
     },
     {
       "source": "local",
@@ -79,6 +82,7 @@ Plugins can be a shorthand string or an object with more options.
 | `ref` | git | no | branch, tag, or commit to checkout |
 | `path` | local | yes | path to plugin directory or file (relative paths resolve against the config file's directory) |
 | `entry` | all | no | entry file override, or an array of entrypoints to load multiple plugins from the same source (default: auto-detected `opencode.plugin.ts`) |
+| `options` | all | no | plugin-specific options passed as the second argument to the plugin factory |
 | `build.command` | git, local | no | shell command to run after clone/checkout |
 | `build.timeout` | git, local | no | build timeout in ms (max 300000) |
 

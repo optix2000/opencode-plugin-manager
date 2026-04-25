@@ -247,6 +247,36 @@ describe("loadMergedConfig", () => {
     })
   })
 
+  test("preserves plugin options on object plugin entries", async () => {
+    setExistingFiles([GLOBAL_CONFIG_JSON])
+    setConfigFiles({
+      [GLOBAL_CONFIG_JSON]: {
+        plugins: [
+          { source: "npm", name: "configured", options: { enabled: true } },
+          {
+            source: "git",
+            repo: "https://github.com/Org/Repo.git",
+            entry: ["./a.js", "./b.js"],
+            options: { mode: "shared" },
+          },
+        ],
+      },
+    })
+
+    const result = await loadMergedConfig(input("/repo", "/repo"))
+    const byId = new Map(result.plugins.map((plugin) => [plugin.id, plugin]))
+
+    expect(byId.get("npm:configured")).toMatchObject({
+      options: { enabled: true },
+    })
+    expect(byId.get("git:https://github.com/Org/Repo#./a.js")).toMatchObject({
+      options: { mode: "shared" },
+    })
+    expect(byId.get("git:https://github.com/Org/Repo#./b.js")).toMatchObject({
+      options: { mode: "shared" },
+    })
+  })
+
   test("merges by plugin id and lets plugins.jsonc override plugins.json", async () => {
     setExistingFiles([GLOBAL_CONFIG_JSON, GLOBAL_CONFIG_JSONC])
     setConfigFiles({
