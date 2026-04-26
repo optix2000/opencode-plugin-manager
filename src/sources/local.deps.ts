@@ -1,5 +1,5 @@
 import type { Logger } from "../log"
-import fs from "node:fs/promises"
+import * as fs from "node:fs/promises"
 import { runCommand, sha256File } from "../util"
 import { resolvePluginEntry as resolvePluginEntryFromShared } from "./shared"
 

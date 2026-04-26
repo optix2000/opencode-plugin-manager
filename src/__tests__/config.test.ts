@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test"
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import path from "node:path"
 import { makeSpec } from "./helpers"
 
@@ -18,9 +18,10 @@ function realNormalizeGitRepo(value: string): string {
 function realParseNpmShorthand(value: string): { name: string; version?: string } {
   const lastAtIndex = value.lastIndexOf("@")
   if (lastAtIndex <= 0) return { name: value }
+  const version = value.slice(lastAtIndex + 1)
   return {
     name: value.slice(0, lastAtIndex),
-    version: value.slice(lastAtIndex + 1),
+    ...(version ? { version } : {}),
   }
 }
 
@@ -44,6 +45,10 @@ mock.module("../config.deps", () => ({
 }))
 
 const { loadMergedConfig, pluginDisplayName } = await import("../config")
+
+afterAll(() => {
+  mock.restore()
+})
 
 type LoadMergedConfigInput = Parameters<typeof loadMergedConfig>[0]
 

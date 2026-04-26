@@ -1,12 +1,17 @@
 import { afterAll, describe, test, expect, mock, beforeEach } from "bun:test"
-import fs from "node:fs/promises"
+import * as fs from "node:fs/promises"
 import path from "node:path"
-import os from "node:os"
+import * as os from "node:os"
 import { randomUUID } from "node:crypto"
 
-// We test the pure functions directly — they don't need mocking
-import { CappedBuffer, expandHome, sanitizeSegment, normalizeGitRepo, parseNpmShorthand, sha256File } from "../util"
 import { isGitRepoUrl } from "../types"
+
+mock.restore()
+
+// We test the pure functions directly; restoring mocks first keeps this file isolated in full-suite runs.
+const { CappedBuffer, expandHome, sanitizeSegment, normalizeGitRepo, parseNpmShorthand, sha256File } = await import(
+  "../util"
+)
 
 describe("parseNpmShorthand", () => {
   const cases: Array<{ name: string; input: string; expected: { name: string; version?: string } }> = [
@@ -45,9 +50,10 @@ describe("parseNpmShorthand", () => {
 })
 
 describe("expandHome", () => {
+  const home = expandHome("~")
   const cases: Array<{ name: string; input: string; expected: string }> = [
-    { name: "exact ~ returns homedir", input: "~", expected: os.homedir() },
-    { name: "~/path joins with homedir", input: "~/foo/bar", expected: path.join(os.homedir(), "foo/bar") },
+    { name: "exact ~ returns homedir", input: "~", expected: home },
+    { name: "~/path joins with homedir", input: "~/foo/bar", expected: path.join(home, "foo/bar") },
     { name: "absolute path passes through unchanged", input: "/absolute/path", expected: "/absolute/path" },
     { name: "relative path passes through unchanged", input: "relative/path", expected: "relative/path" },
   ]

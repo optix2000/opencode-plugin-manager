@@ -1,4 +1,4 @@
-import os from "node:os"
+import * as os from "node:os"
 import path from "node:path"
 import type { MergedConfig } from "./config"
 import type { Logger } from "./log"

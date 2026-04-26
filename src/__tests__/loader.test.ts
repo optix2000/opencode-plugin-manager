@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import fs from "node:fs"
-import os from "node:os"
+import * as os from "node:os"
 import path from "node:path"
 import { makeCacheContext, makeLockEntry, makeSpec } from "./helpers"
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
-import os from "node:os"
+import * as os from "node:os"
 import path from "node:path"
 import type { MergedConfig } from "../config"
 import type { Lockfile } from "../types"

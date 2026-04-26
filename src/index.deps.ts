@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
-import fs from "node:fs/promises"
+import * as fs from "node:fs/promises"
 import { pruneCacheDirectories, readLockfile, resolveCacheContext, withCacheLock, writeLockfile } from "./cache"
 import { loadMergedConfig, pluginDisplayName } from "./config"
 import { loadManagedPlugins, mergeManagedHooks } from "./loader"
