@@ -3,6 +3,22 @@ import { createNoopLogger, type Logger } from "../log"
 import { exists, fs } from "./shared.deps"
 
 const DEFAULT_ENTRYPOINT = "opencode.plugin.ts"
+// Auto-detected entrypoints prefer built output, then root files, then source.
+// Within each folder, index wins over plugin and JavaScript wins over TypeScript.
+const AUTO_ENTRYPOINT_CANDIDATES = [
+  "dist/index.js",
+  "dist/index.ts",
+  "dist/plugin.js",
+  "dist/plugin.ts",
+  "index.js",
+  "index.ts",
+  "plugin.js",
+  "plugin.ts",
+  "src/index.js",
+  "src/index.ts",
+  "src/plugin.js",
+  "src/plugin.ts",
+] as const
 const EXPORT_CONDITION_PRIORITY = ["bun", "import", "default", "node", "require"] as const
 
 export async function resolvePluginEntry(
@@ -36,7 +52,7 @@ export async function resolvePluginEntry(
         main?: string
       }
       const exportCandidates = resolveExports(pkg.exports)
-      const candidates = [...exportCandidates, pkg.module, pkg.main, "index.js", "dist/index.js"].filter(
+      const candidates = [...exportCandidates, pkg.module, pkg.main, ...AUTO_ENTRYPOINT_CANDIDATES].filter(
         (value): value is string => Boolean(value),
       )
 
@@ -56,7 +72,7 @@ export async function resolvePluginEntry(
     }
   }
 
-  for (const fallback of ["index.js", "plugin.js"]) {
+  for (const fallback of AUTO_ENTRYPOINT_CANDIDATES) {
     const resolved = path.join(rootDir, fallback)
     attemptedPaths.push(resolved)
     if (await exists(resolved)) return resolved

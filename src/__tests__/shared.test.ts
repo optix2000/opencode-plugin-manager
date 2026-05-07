@@ -184,6 +184,25 @@ describe("resolvePluginEntry", () => {
     await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(moduleEntry)
   })
 
+  test("falls through to dist/index.js before src/index.js from package.json", async () => {
+    const pkgPath = path.join(ROOT_DIR, "package.json")
+    const srcEntry = path.resolve(ROOT_DIR, "src/index.js")
+    const distEntry = path.resolve(ROOT_DIR, "dist/index.js")
+    setExistingPaths([pkgPath, srcEntry, distEntry])
+    mockFsReadFile.mockResolvedValue(JSON.stringify({}))
+
+    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(distEntry)
+  })
+
+  test("uses auto-detected entrypoint candidates from package.json fallback", async () => {
+    const pkgPath = path.join(ROOT_DIR, "package.json")
+    const distPluginEntry = path.resolve(ROOT_DIR, "dist/plugin.ts")
+    setExistingPaths([pkgPath, distPluginEntry])
+    mockFsReadFile.mockResolvedValue(JSON.stringify({}))
+
+    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(distPluginEntry)
+  })
+
   test("falls through to default file checks when package.json is malformed", async () => {
     const pkgPath = path.join(ROOT_DIR, "package.json")
     const indexEntry = path.join(ROOT_DIR, "index.js")
@@ -193,19 +212,29 @@ describe("resolvePluginEntry", () => {
     await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(indexEntry)
   })
 
-  test("finds index.js when no package.json or conventional entry exists", async () => {
-    const indexEntry = path.join(ROOT_DIR, "index.js")
-    setExistingPaths([indexEntry])
+  const autoEntrypointCandidates = [
+    "dist/index.js",
+    "dist/index.ts",
+    "dist/plugin.js",
+    "dist/plugin.ts",
+    "index.js",
+    "index.ts",
+    "plugin.js",
+    "plugin.ts",
+    "src/index.js",
+    "src/index.ts",
+    "src/plugin.js",
+    "src/plugin.ts",
+  ] as const
 
-    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(indexEntry)
-  })
+  for (const candidate of autoEntrypointCandidates) {
+    test(`finds ${candidate} when no package.json or conventional entry exists`, async () => {
+      const entry = path.join(ROOT_DIR, candidate)
+      setExistingPaths([entry])
 
-  test("finds plugin.js when index.js does not exist", async () => {
-    const pluginEntry = path.join(ROOT_DIR, "plugin.js")
-    setExistingPaths([pluginEntry])
-
-    await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(pluginEntry)
-  })
+      await expect(resolvePluginEntry(ROOT_DIR)).resolves.toBe(entry)
+    })
+  }
 
   test("throws when no candidate entrypoint exists", async () => {
     setExistingPaths([])
